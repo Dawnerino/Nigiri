@@ -160,7 +160,7 @@ def main() -> None:
     if model_id:
         with _LOCK:
             _start(model_id)
-    uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="warning")
+    uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="info")
 
 
 if __name__ == "__main__":

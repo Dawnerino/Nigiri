@@ -19,6 +19,7 @@ import sys
 import tempfile
 import threading
 import time
+import traceback
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -114,13 +115,23 @@ def transcribe(file: UploadFile = File(...), model: str = Form(""),
     weight = available[model_id]
 
     suffix = Path(file.filename or "audio.wav").suffix or ".wav"
-    with tempfile.TemporaryDirectory() as td:
-        src = Path(td) / ("in" + suffix)
-        src.write_bytes(file.file.read())
-        wav = Path(td) / "in16k.wav"
-        _ffmpeg_to_wav16k(src, wav)
-        with _LOCK:
-            data = _run_whisper(wav, weight, language, prompt)
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / ("in" + suffix)
+            src.write_bytes(file.file.read())
+            wav = Path(td) / "in16k.wav"
+            _ffmpeg_to_wav16k(src, wav)
+            with _LOCK:
+                data = _run_whisper(wav, weight, language, prompt)
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        # Anything unexpected (decode crash, whisper-cli segfault, bad weights)
+        # would otherwise surface as a bare "Internal Server Error". Log the
+        # traceback to runtime/stt.log and return the real reason.
+        sys.stderr.write("[stt] unhandled error: " + traceback.format_exc() + "\n")
+        sys.stderr.flush()
+        raise HTTPException(500, f"transcription failed: {exc}")
 
     # whisper.cpp -oj emits {"transcription":[{"text":...}, ...]}; join segments.
     text = ""
@@ -136,7 +147,7 @@ def transcribe(file: UploadFile = File(...), model: str = Form(""),
 def main() -> None:
     import uvicorn
     port = int(os.environ.get("STT_PORT", "9101"))
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
 
 
 if __name__ == "__main__":

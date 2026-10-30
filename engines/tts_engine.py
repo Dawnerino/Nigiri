@@ -210,7 +210,7 @@ def speech(payload: dict = Body(...)) -> Response:
 def main() -> None:
     import uvicorn
     port = int(os.environ.get("TTS_PORT", "9103"))
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
 
 
 if __name__ == "__main__":
