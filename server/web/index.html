@@ -85,6 +85,7 @@
     <div class="tag">hand-pressed local voice — speech · translate · speech</div>
   </div>
   <div class="spacer"></div>
+  <button id="setup-btn" class="ghost" style="margin-right:10px">⚙ Setup</button>
   <span id="bind-pill" class="pill">localhost</span>
 </header>
 <main>
@@ -188,6 +189,12 @@ function stepNav(active) {
   const steps = ['Your machine','Runtimes','Choose models','Download'];
   const n = el('div','nav');
   steps.forEach((s,i)=>{ n.appendChild(el('div','n'+(i===active?' on':''), s)); });
+  if (STATUS.done) {
+    const back = el('button','ghost','← Back to dashboard');
+    back.style.marginLeft = 'auto';
+    back.onclick = () => closeSetup();
+    n.appendChild(back);
+  }
   return n;
 }
 
@@ -531,10 +538,31 @@ async function runPipeline() {
   run.disabled = false;
 }
 
+// ---------------------------------------------------------------- setup re-entry
+// After first run the dashboard hides the wizard; this lets the user jump back
+// to the runtime-install + model-choice steps without resetting anything.
+function openSetup(step) {
+  $('#dashboard').style.display = 'none';
+  $('#pipeline').style.display = 'none';
+  $('#wizard').style.display = 'block';
+  STATUS._step = (step == null ? 1 : step);   // default: the runtimes step
+  renderWizard();
+  window.scrollTo(0, 0);
+}
+
+function closeSetup() {
+  $('#wizard').style.display = 'none';
+  $('#dashboard').style.display = 'block';
+  $('#pipeline').style.display = 'block';
+  renderDashboard().catch(() => {});
+}
+
 // ---------------------------------------------------------------- boot
 async function boot() {
   STATUS = await api('/api/setup/status');
   STATUS.downloaded = STATUS.downloaded;
+  const setupBtn = $('#setup-btn');
+  if (setupBtn) setupBtn.onclick = () => openSetup(1);
   if(STATUS.done) {
     $('#wizard').style.display='none';
     $('#dashboard').style.display='block';
