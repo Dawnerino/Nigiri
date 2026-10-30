@@ -22,6 +22,16 @@ you can move the whole thing around as one directory.
 You need **[uv](https://docs.astral.sh/uv/)** (a fast Python package manager) and
 Python 3.10+. That's it - no compiler, no CUDA toolkit, no LM Studio.
 
+You'll also want **ffmpeg** on your PATH - Nigiri uses it to decode uploaded or
+recorded audio. If it's missing the first-run wizard will tell you:
+
+```bash
+# macOS
+brew install ffmpeg
+# Debian / Ubuntu
+sudo apt install ffmpeg
+```
+
 ```bash
 git clone https://github.com/Dawnerino/Nigiri.git
 cd nigiri

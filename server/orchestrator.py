@@ -443,6 +443,24 @@ async def speech(payload: dict = Body(...)) -> Response:
 
 
 # ------------------------------------------------------------------- pipeline
+def _engine_error(resp) -> str:
+    """Pull a human-readable message out of an engine error response.
+
+    FastAPI errors carry {"detail": "..."}; a bare 500 from a crashed shim may
+    carry nothing useful, so we fall back to the raw text. ffmpeg is the most
+    common missing dependency, so we hint at it explicitly.
+    """
+    detail = ""
+    try:
+        detail = (resp.json() or {}).get("detail", "") or ""
+    except Exception:
+        detail = (resp.text or "").strip()
+    detail = (detail or f"HTTP {resp.status_code}")[:300]
+    if "ffmpeg" in detail.lower():
+        detail += "  (install ffmpeg: macOS `brew install ffmpeg`, Debian/Ubuntu `sudo apt install ffmpeg`)"
+    return detail
+
+
 @app.post("/api/pipeline")
 async def pipeline(file: UploadFile = File(...), source: str = Form("auto"),
                    target: str = Form("English")) -> Response:
@@ -454,19 +472,19 @@ async def pipeline(file: UploadFile = File(...), source: str = Form("auto"),
                            files={"file": (file.filename or "audio.wav", audio)},
                            data={"language": source})
         if stt.status_code != 200:
-            raise HTTPException(502, f"STT failed: {stt.text[:300]}")
+            raise HTTPException(502, f"STT failed: {_engine_error(stt)}")
         transcript = stt.json().get("text", "").strip()
         if not transcript:
             raise HTTPException(422, "empty transcript")
         tr = await c.post(f"http://127.0.0.1:{TRANSLATOR_PORT}/translate",
                           json={"text": transcript, "source": source, "target": target})
         if tr.status_code != 200:
-            raise HTTPException(502, f"translation failed: {tr.text[:300]}")
+            raise HTTPException(502, f"translation failed: {_engine_error(tr)}")
         translated = tr.json().get("translated", "")
         sp = await c.post(f"http://127.0.0.1:{TTS_PORT}/v1/audio/speech",
                           json={"input": translated, "language": target})
         if sp.status_code != 200:
-            raise HTTPException(502, f"TTS failed: {sp.text[:300]}")
+            raise HTTPException(502, f"TTS failed: {_engine_error(sp)}")
     return JSONResponse({"transcript": transcript, "translated": translated,
                          "audio_b64": base64.b64encode(sp.content).decode()})
 

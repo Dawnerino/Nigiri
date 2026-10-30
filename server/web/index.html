@@ -246,6 +246,12 @@ function renderStepRuntimes(w) {
     d.innerHTML = `<span class="dot ${ok?'up':'down'}"></span> <b>${name}</b> <span class="pill ${ok?'ok':'down'}">${ok?'installed':'missing'}</span>`; return d; };
   rows.appendChild(mk('llama-server (llama.cpp)', b.llama_server));
   rows.appendChild(mk('whisper-cli (whisper.cpp)', b.whisper_cli));
+  const ffHint = (navigator.platform||'').toLowerCase().includes('mac')
+    ? 'brew install ffmpeg' : 'apt install ffmpeg';
+  const ffd = el('div','row'); ffd.style.margin='8px 0';
+  ffd.innerHTML = `<span class="dot ${b.ffmpeg?'up':'down'}"></span> <b>ffmpeg (audio decode)</b> <span class="pill ${b.ffmpeg?'ok':'down'}">${b.ffmpeg?'installed':'missing'}</span>` +
+    (b.ffmpeg ? '' : ` <span class="muted small">required for uploads &amp; recording — run <code>${ffHint}</code></span>`);
+  rows.appendChild(ffd);
   card.appendChild(rows);
   const actions = el('div','row'); actions.style.marginTop='14px';
   if(!(b.llama_server && b.whisper_cli)) {

@@ -69,6 +69,7 @@ def status() -> dict:
     return {
         "llama_server": _has(llama_server_path()),
         "whisper_cli": _has(whisper_cli_path()),
+        "ffmpeg": bool(shutil.which("ffmpeg")),
         "bin_dir": str(BIN),
     }
 
