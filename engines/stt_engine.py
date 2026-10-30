@@ -65,6 +65,12 @@ def _ffmpeg_to_wav16k(src: Path, dst: Path) -> None:
 
 def _run_whisper(wav: Path, model: Path, lang: str, prompt: str) -> dict:
     out_base = wav.with_suffix("")
+    if not BIN.exists():
+        raise HTTPException(
+            503, f"whisper-cli is not installed at {BIN}. Open the Nigiri setup "
+                 "wizard and click 'Install missing runtimes' (on macOS this "
+                 "builds whisper.cpp from source and needs Xcode Command Line "
+                 "Tools + cmake: `xcode-select --install` and `brew install cmake`).")
     cmd = [str(BIN), "-m", str(model), "-f", str(wav), "-t", THREADS,
            "-oj", "-of", str(out_base), "-np", "--flash-attn"]
     cmd += ["-l", lang if (lang and lang != "auto") else "auto"]

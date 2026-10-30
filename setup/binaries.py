@@ -225,9 +225,10 @@ def _build_whisper_from_source() -> tuple[bool, str]:
     missing = [t for t in ("git", "cmake", "cc") if not shutil.which(t)]
     if missing:
         return False, ("whisper.cpp must be built from source but "
-                       + ", ".join(missing) + " is missing - install Xcode "
-                       "Command Line Tools (xcode-select --install) and cmake, "
-                       "then retry")
+                       + ", ".join(missing) + " is missing. On macOS run "
+                       "`xcode-select --install` (for git + cc) and "
+                       "`brew install cmake`, then retry. "
+                       "(On Linux: sudo apt install build-essential cmake git)")
 
     WHISPER_DIR.mkdir(parents=True, exist_ok=True)
     log_path = ROOT / "runtime" / "build-whisper.log"
