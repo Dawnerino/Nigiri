@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import io
 import os
+import sys
 import threading
 from pathlib import Path
 
@@ -23,6 +24,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+from setup import python_deps  # noqa: E402
+
 MODELS = ROOT / "models"
 
 ENGINE = os.environ.get("TTS_ENGINE", "supertonic").strip().lower()
@@ -198,7 +202,14 @@ def speech(payload: dict = Body(...)) -> Response:
             else:
                 wav = _synthesize_supertonic(text, voice, lang)
     except ImportError as exc:
-        raise HTTPException(500, f"TTS runtime not installed for engine '{ENGINE}': {exc}")
+        # Imports are lazy, so the shim started fine and this is the first place
+        # a missing onnxruntime/torch can surface. Name the command that fixes it,
+        # and record it so /health stops reporting a healthy engine.
+        _resident["error"] = f"runtime not installed: {exc}"
+        hint = python_deps.install_hint("tts", MODEL)
+        fix = f" Install it with: {hint}" if hint else ""
+        raise HTTPException(500, f"TTS runtime not installed for engine '{ENGINE}': "
+                            f"{exc}.{fix}")
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001

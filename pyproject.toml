@@ -23,6 +23,7 @@ dependencies = [
 [project.optional-dependencies]
 # Supertonic 3 TTS: ONNX Runtime, CPU-friendly, no torch.
 supertonic = [
+    "supertonic>=1.1",
     "onnxruntime>=1.17",
     "numpy>=1.24",
     "soundfile>=0.12",

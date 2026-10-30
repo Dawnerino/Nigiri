@@ -34,7 +34,8 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from setup import catalog, detect, recommend, binaries, downloads  # noqa: E402
+from setup import (binaries, catalog, detect, downloads, python_deps,
+                   recommend)  # noqa: E402
 
 RUNTIME = ROOT / "runtime"
 WEB = ROOT / "server" / "web"
@@ -62,9 +63,14 @@ _INSTALL: dict[str, object] = {"running": False, "started": False,
 
 
 def _install_worker() -> None:
-    """Run binaries.ensure_all() in the background, recording the outcome."""
+    """Install compiled binaries and engine Python runtimes, recording outcome."""
     try:
         result = binaries.ensure_all()
+        # The engines' own Python runtimes (onnxruntime for Supertonic, torch
+        # for Qwen3-TTS) are deliberately left out of the base venv, so fetch
+        # the ones the chosen models actually need here rather than letting the
+        # user meet them as an ImportError at synthesis time.
+        result.update(python_deps.ensure_selection(chosen()))
         ok = all(v.get("ok") for v in result.values() if isinstance(v, dict))
         with _INSTALL_LOCK:
             _INSTALL["result"] = result
@@ -223,6 +229,14 @@ def start_engines() -> None:
     c = chosen()
     if not c:
         return
+    # Self-heal a half-installed venv (e.g. a TTS runtime that was never
+    # fetched) so a restart fixes it without re-running the wizard. Cheap when
+    # nothing is missing: find_spec decides, and we only shell out if it is.
+    for res in python_deps.ensure_selection(c).values():
+        if res.get("installed"):
+            print(f"[nigiri] installed engine runtime: {', '.join(res['installed'])}")
+        if res.get("error"):
+            print(f"[nigiri] engine runtime install failed: {res['error']}")
     dev = _place_devices(c)
     # STT
     _start_child("stt", "engines.stt_engine",
@@ -255,6 +269,7 @@ def setup_status() -> dict:
         "done": is_setup_done(),
         "profile": prof,
         "binaries": binaries.status(),
+        "python_runtime": python_deps.status(chosen()),
         "recommendation": rec,
         "catalog": catalog.ALL,
         "downloaded": {
@@ -287,6 +302,7 @@ def install_status() -> dict:
     with _INSTALL_LOCK:
         snap = dict(_INSTALL)
     snap["binaries"] = binaries.status()
+    snap["python_install"] = python_deps.progress()
     return snap
 
 

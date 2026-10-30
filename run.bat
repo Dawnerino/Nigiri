@@ -21,7 +21,11 @@ if not exist ".venv" (
   uv venv .venv
 )
 echo [nigiri] syncing base dependencies...
-uv sync --no-install-project || uv pip install fastapi uvicorn httpx psutil huggingface-hub python-multipart
+REM --inexact is required: the first-run wizard lazily installs big per-engine
+REM runtimes (onnxruntime for Supertonic, torch for Qwen3-TTS) that are not in
+REM the base dependency set. A plain `uv sync` uninstalls anything extraneous,
+REM which would silently strip the TTS runtime on the very next launch.
+uv sync --no-install-project --inexact || uv pip install fastapi uvicorn httpx psutil huggingface-hub python-multipart
 
 set "PY=.venv\Scripts\python.exe"
 if not exist "%PY%" set "PY=python"

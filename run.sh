@@ -23,7 +23,11 @@ if [ ! -d ".venv" ]; then
   uv venv .venv
 fi
 echo "[nigiri] syncing base dependencies..."
-uv sync --no-install-project || uv pip install fastapi uvicorn httpx psutil huggingface-hub python-multipart
+# --inexact is required: the first-run wizard lazily installs big per-engine
+# runtimes (onnxruntime for Supertonic, torch for Qwen3-TTS) that are not in
+# the base dependency set. A plain `uv sync` uninstalls anything extraneous,
+# which would silently strip the TTS runtime on the very next launch.
+uv sync --no-install-project --inexact || uv pip install fastapi uvicorn httpx psutil huggingface-hub python-multipart
 
 # Prefer the venv python; fall back to system python3.
 PY=".venv/bin/python"
