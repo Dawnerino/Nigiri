@@ -54,6 +54,30 @@ _CHILD_LOCK = threading.Lock()
 _CHILDREN: dict[str, subprocess.Popen] = {}
 _LOGS: dict[str, object] = {}
 
+# Background runtime-install state (a whisper.cpp source build can take minutes,
+# so the wizard kicks it off in a thread and polls rather than blocking a request).
+_INSTALL_LOCK = threading.Lock()
+_INSTALL: dict[str, object] = {"running": False, "started": False,
+                               "result": None, "message": ""}
+
+
+def _install_worker() -> None:
+    """Run binaries.ensure_all() in the background, recording the outcome."""
+    try:
+        result = binaries.ensure_all()
+        ok = all(v.get("ok") for v in result.values() if isinstance(v, dict))
+        with _INSTALL_LOCK:
+            _INSTALL["result"] = result
+            _INSTALL["message"] = "all runtimes ready" if ok else \
+                "some runtimes failed to install"
+    except Exception as exc:  # noqa: BLE001
+        with _INSTALL_LOCK:
+            _INSTALL["result"] = None
+            _INSTALL["message"] = f"install error: {exc}"
+    finally:
+        with _INSTALL_LOCK:
+            _INSTALL["running"] = False
+
 
 # --------------------------------------------------------------------- config io
 def _read_json(path: Path, default: dict) -> dict:
@@ -243,8 +267,27 @@ def setup_status() -> dict:
 
 @app.post("/api/setup/install_binaries")
 def install_binaries() -> dict:
-    """Offered when llama.cpp / whisper.cpp are missing. Downloads prebuilts."""
-    return binaries.ensure_all()
+    """Kick off runtime install in the background (a source build is slow).
+
+    The wizard polls /api/setup/install_status until running == False.
+    """
+    with _INSTALL_LOCK:
+        if _INSTALL["running"]:
+            return {"started": True, "running": True,
+                    "message": "install already in progress"}
+        _INSTALL.update({"running": True, "started": True, "result": None,
+                         "message": "installing runtimes…"})
+    threading.Thread(target=_install_worker, daemon=True).start()
+    return {"started": True, "running": True, "message": "installing runtimes…"}
+
+
+@app.get("/api/setup/install_status")
+def install_status() -> dict:
+    """Progress of the background runtime install + current binary presence."""
+    with _INSTALL_LOCK:
+        snap = dict(_INSTALL)
+    snap["binaries"] = binaries.status()
+    return snap
 
 
 @app.post("/api/setup/choose")

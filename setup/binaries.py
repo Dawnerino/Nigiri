@@ -18,8 +18,11 @@ from __future__ import annotations
 import io
 import os
 import platform
+import shutil
 import stat
+import subprocess
 import tarfile
+import tempfile
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -39,6 +42,10 @@ WHISPER_TAG = "b5454"
 
 LLAMA_REPO = "ggml-org/llama.cpp"
 WHISPER_REPO = "ggml-org/whisper.cpp"
+
+# Source ref used when we have to build whisper-cli ourselves (macOS publishes
+# no CLI prebuilt - only a library xcframework). Kept in sync with WHISPER_TAG.
+WHISPER_SRC_REF = WHISPER_TAG
 
 
 def _exe(name: str, directory: Path) -> Path:
@@ -183,6 +190,74 @@ def _fetch_release(repo: str, tag: str, asset: str, wanted: list[str],
         return False
 
 
+def _have(tools: list[str]) -> bool:
+    return all(shutil.which(t) for t in tools)
+
+
+def _run(cmd: list[str], cwd: Path, log_path: Path) -> bool:
+    """Run a build step, appending stdout+stderr to log_path. True on success."""
+    try:
+        with log_path.open("ab") as log:
+            proc = subprocess.run(cmd, cwd=str(cwd), stdout=log,
+                                  stderr=subprocess.STDOUT, timeout=3600)
+        return proc.returncode == 0
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+
+
+def _find_built(name: str, root: Path) -> Path | None:
+    """Locate a freshly built executable by name anywhere under root."""
+    for p in root.rglob(name):
+        if p.is_file() and os.access(p, os.X_OK):
+            return p
+    return None
+
+
+def _build_whisper_from_source() -> tuple[bool, str]:
+    """Build whisper-cli from source into ./bin/whisper.
+
+    macOS publishes no CLI prebuilt (only a library xcframework), so on Apple
+    machines this is the primary install path. It also serves as the fallback
+    for any platform whose prebuilt download failed. Requires git + cmake + a C
+    compiler; returns (ok, message).
+    """
+    missing = [t for t in ("git", "cmake", "cc") if not shutil.which(t)]
+    if missing:
+        return False, ("whisper.cpp must be built from source but "
+                       + ", ".join(missing) + " is missing - install Xcode "
+                       "Command Line Tools (xcode-select --install) and cmake, "
+                       "then retry")
+
+    WHISPER_DIR.mkdir(parents=True, exist_ok=True)
+    log_path = ROOT / "runtime" / "build-whisper.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = Path(tempfile.mkdtemp(prefix="nigiri-whisper-"))
+    src = tmp / "whisper.cpp"
+    try:
+        if not _run(["git", "clone", "--depth", "1", "--branch", WHISPER_SRC_REF,
+                     f"https://github.com/{WHISPER_REPO}.git", str(src)],
+                    tmp, log_path):
+            return False, "git clone of whisper.cpp failed - check network (see runtime/build-whisper.log)"
+        if not _run(["cmake", "-B", "build", "-DCMAKE_BUILD_TYPE=Release"],
+                    src, log_path):
+            return False, "cmake configure failed for whisper.cpp (see runtime/build-whisper.log)"
+        jobs = str(max(1, (os.cpu_count() or 2)))
+        if not _run(["cmake", "--build", "build", "--config", "Release",
+                     "-j", jobs], src, log_path):
+            return False, "whisper.cpp build failed (see runtime/build-whisper.log)"
+        built = _find_built("whisper-cli", src / "build")
+        if built is None:
+            return False, "whisper.cpp built but whisper-cli not found (see runtime/build-whisper.log)"
+        shutil.copy2(built, whisper_cli_path())
+        _chmod_x(whisper_cli_path())
+        # Copy any sibling dylibs the CLI links against so it loads standalone.
+        for lib in built.parent.glob("*.dylib"):
+            shutil.copy2(lib, WHISPER_DIR / lib.name)
+        return True, "built whisper-cli from source (whisper.cpp)"
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def ensure_llama() -> tuple[bool, str]:
     """Make sure llama-server exists. Returns (ok, message)."""
     if _has(llama_server_path()):
@@ -198,24 +273,32 @@ def ensure_llama() -> tuple[bool, str]:
 
 
 def ensure_whisper() -> tuple[bool, str]:
-    """Make sure whisper-cli exists. Returns (ok, message)."""
+    """Make sure whisper-cli exists. Returns (ok, message).
+
+    macOS ships no CLI prebuilt (only a library xcframework), so there we build
+    from source directly. On Linux/Windows we try the prebuilt first and fall
+    back to a source build if the download fails.
+    """
     if _has(whisper_cli_path()):
         return True, "whisper-cli already present"
     WHISPER_DIR.mkdir(parents=True, exist_ok=True)
     os_name, arch = platform.system(), platform.machine()
-    asset = _whisper_asset(os_name, arch)
-    if _fetch_release(WHISPER_REPO, WHISPER_TAG, asset,
-                      ["whisper-cli", "whisper-cli.exe", "main", "main.exe"],
-                      WHISPER_DIR):
-        # Recent whisper.cpp releases ship `main` as a tiny deprecated stub that
-        # just prints a warning; the real CLI is `whisper-cli`. If only `main`
-        # was present (older builds), promote it.
-        stub = WHISPER_DIR / "main"
-        if stub.exists() and not whisper_cli_path().exists():
-            stub.replace(whisper_cli_path())
-        return True, f"downloaded whisper-cli ({asset})"
-    return False, (f"could not fetch whisper-cli prebuilt ({asset}); "
-                   "build whisper.cpp from source and drop whisper-cli into ./bin")
+
+    if os_name != "Darwin":
+        asset = _whisper_asset(os_name, arch)
+        if _fetch_release(WHISPER_REPO, WHISPER_TAG, asset,
+                          ["whisper-cli", "whisper-cli.exe", "main", "main.exe"],
+                          WHISPER_DIR):
+            # Recent whisper.cpp releases ship `main` as a tiny deprecated stub
+            # that just prints a warning; the real CLI is `whisper-cli`. If only
+            # `main` was present (older builds), promote it.
+            stub = WHISPER_DIR / "main"
+            if stub.exists() and not whisper_cli_path().exists():
+                stub.replace(whisper_cli_path())
+            return True, f"downloaded whisper-cli ({asset})"
+
+    # No usable prebuilt (macOS, or a failed download): build from source.
+    return _build_whisper_from_source()
 
 
 def ensure_all() -> dict:

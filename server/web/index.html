@@ -251,11 +251,9 @@ function renderStepRuntimes(w) {
     const inst = el('button','','Install missing runtimes');
     inst.onclick = async (e)=>{ e.target.disabled=true; e.target.textContent='Installing…';
       try {
-        const res = await post('/api/setup/install_binaries');
-        STATUS.binaries = {llama_server:res.llama_server.ok, whisper_cli:res.whisper_cli.ok};
-        toast('llama-server: '+res.llama_server.message+'  |  whisper-cli: '+res.whisper_cli.message);
-      } catch(err){ toast('install failed: '+err.message); }
-      renderStepRuntimes(w); };
+        await post('/api/setup/install_binaries');
+        pollInstall(inst);
+      } catch(err){ toast('install failed: '+err.message); renderStepRuntimes(w); } };
     actions.appendChild(inst);
   }
   const next = el('button','ghost','Next: choose models →');
@@ -263,6 +261,25 @@ function renderStepRuntimes(w) {
   actions.appendChild(next);
   card.appendChild(actions);
   w.appendChild(card);
+}
+
+async function pollInstall(btn) {
+  try {
+    const s = await api('/api/setup/install_status');
+    STATUS.binaries = {llama_server: s.binaries.llama_server,
+                       whisper_cli: s.binaries.whisper_cli};
+    if (s.running) {
+      if (btn) { btn.disabled = true; btn.textContent = 'Installing… (building, may take a few minutes)'; }
+      setTimeout(() => pollInstall(btn), 2000);
+      return;
+    }
+    // Finished: report per-runtime outcome, then re-render the step.
+    const r = s.result || {};
+    const lm = (r.llama_server && r.llama_server.message) || 'llama-server';
+    const wm = (r.whisper_cli && r.whisper_cli.message) || 'whisper-cli';
+    toast('llama-server: ' + lm + '  |  whisper-cli: ' + wm);
+    renderWizard();
+  } catch (e) { setTimeout(() => pollInstall(btn), 2500); }
 }
 
 function renderStepChoose(w) {
