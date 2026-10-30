@@ -23,7 +23,7 @@ You need **[uv](https://docs.astral.sh/uv/)** (a fast Python package manager) an
 Python 3.10+. That's it - no compiler, no CUDA toolkit, no LM Studio.
 
 ```bash
-git clone https://github.com/your-name/nigiri.git
+git clone https://github.com/Dawnerino/Nigiri.git
 cd nigiri
 
 # Linux / macOS
