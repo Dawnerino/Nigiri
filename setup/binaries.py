@@ -214,6 +214,47 @@ def _find_built(name: str, root: Path) -> Path | None:
     return None
 
 
+def _fix_macos_rpaths(exe: Path, lib_dir: Path) -> None:
+    """Rewrite a Mach-O binary's rpaths to @executable_path (best effort).
+
+    A whisper-cli built by cmake carries an absolute LC_RPATH into the build
+    tree (and the temp dir we delete afterwards). macOS resolves @rpath against
+    those paths and ignores LD_LIBRARY_PATH, so the copied binary aborts with
+    "image not found". We delete the stale rpaths and add @executable_path (plus
+    @loader_path) so it finds the dylibs sitting next to it. install_name_tool
+    ships with Xcode CLT, which the build already required.
+    """
+    tool = shutil.which("install_name_tool")
+    if not tool:
+        return
+    try:
+        # Parse the binary's load commands with otool to find existing rpaths.
+        otool = shutil.which("otool")
+        rpaths = []
+        if otool:
+            listing = subprocess.run([otool, "-l", str(exe)], capture_output=True,
+                                     text=True, timeout=60).stdout
+            block = False
+            for line in listing.splitlines():
+                s = line.strip()
+                if s.startswith("cmd LC_RPATH"):
+                    block = True
+                elif block and s.startswith("path "):
+                    rpaths.append(s.split(" ", 1)[1].rsplit(" (offset", 1)[0].strip())
+                elif block and s.startswith("Section"):
+                    block = False
+        args = [tool]
+        for rp in rpaths:
+            args += ["-delete_rpath", rp]
+        args += ["-add_rpath", "@executable_path", "-add_rpath", "@loader_path",
+                 str(exe)]
+        subprocess.run(args, capture_output=True, text=True, timeout=60)
+    except Exception:
+        # Best effort: if rewriting fails the DYLD_LIBRARY_PATH launch fallback
+        # still gives the binary a chance to resolve its libraries.
+        pass
+
+
 def _build_whisper_from_source() -> tuple[bool, str]:
     """Build whisper-cli from source into ./bin/whisper.
 
@@ -255,6 +296,12 @@ def _build_whisper_from_source() -> tuple[bool, str]:
         # Copy any sibling dylibs the CLI links against so it loads standalone.
         for lib in built.parent.glob("*.dylib"):
             shutil.copy2(lib, WHISPER_DIR / lib.name)
+        # macOS: the copied binary keeps an absolute @rpath pointing at the
+        # (now-deleted) temp build dir, and macOS ignores LD_LIBRARY_PATH. Point
+        # every rpath at @executable_path so the binary finds the dylibs we just
+        # copied beside it.
+        if platform.system() == "Darwin":
+            _fix_macos_rpaths(whisper_cli_path(), WHISPER_DIR)
         return True, "built whisper-cli from source (whisper.cpp)"
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

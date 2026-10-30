@@ -80,8 +80,14 @@ def _run_whisper(wav: Path, model: Path, lang: str, prompt: str) -> dict:
     ld = os.environ.get("LD_LIBRARY_PATH", "")
     lib_dir = str(BIN.parent)
     new_ld = lib_dir if not ld else (lib_dir + os.pathsep + ld)
+    env = {**os.environ, "LD_LIBRARY_PATH": new_ld, "GGML_CUDA": "1"}
+    # macOS ignores LD_LIBRARY_PATH; whisper-cli's dylibs sit next to the binary,
+    # so also export the Mach-O equivalent as a belt-and-braces fallback.
+    if sys.platform == "darwin":
+        dyld = os.environ.get("DYLD_LIBRARY_PATH", "")
+        env["DYLD_LIBRARY_PATH"] = lib_dir if not dyld else (lib_dir + os.pathsep + dyld)
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800,
-                          env={**os.environ, "LD_LIBRARY_PATH": new_ld, "GGML_CUDA": "1"})
+                          env=env)
     _state["last_exit"] = proc.returncode
     _state["last_ms"] = round((time.time() - started) * 1000, 1)
     if proc.returncode != 0:
