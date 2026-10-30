@@ -90,6 +90,7 @@
 <main>
   <div id="wizard"></div>
   <div id="dashboard" style="display:none"></div>
+  <div id="pipeline" style="display:none"></div>
 </main>
 <div id="toast" class="toast"></div>
 <script>
@@ -425,31 +426,103 @@ async function renderDashboard() {
   const hs = $('#host-sel'); if(hs) hs.value = net.host;
   const hb = $('#host-btn'); if(hb) hb.onclick = async ()=>{ try{ await post('/api/network',{host:hs.value}); toast('saved — restart Nigiri to rebind'); }catch(e){toast(e.message);} };
 
-  // pipeline demo
-  const pipe = el('div','card');
-  pipe.innerHTML = `<h2>Try the pipeline</h2><div class="sub">Record or drop audio → transcribe → translate → speak.</div>
-    <div class="row">
+  // pipeline demo lives in its own persistent container so the 8s dashboard
+  // refresh never wipes a picked file or an in-progress recording.
+  renderPipeline(st);
+}
+
+// ------------------------------------------------------------------- pipeline
+let _pipeState = { file: null, blob: null, mediaRecorder: null, stream: null,
+                   recording: false, langs: null };
+
+async function renderPipeline(st) {
+  const p = $('#pipeline');
+  if (p.style.display === 'none') p.style.display = 'block';
+  if (p.dataset.built === '1') { updatePipeLangs(st); return; }
+  p.dataset.built = '1';
+
+  const card = el('div', 'card');
+  card.innerHTML = `<h2>Try the pipeline</h2><div class="sub">Record or drop audio → transcribe → translate → speak.</div>
+    <div class="row" style="flex-wrap:wrap;gap:8px">
       <input type="file" id="pipe-file" accept="audio/*">
-      <label class="muted small">target:</label>
-      <select id="pipe-target">
-        ${['English','Spanish','French','German','Japanese','Korean','Chinese','Italian','Portuguese','Russian'].map(l=>`<option>${l}</option>`).join('')}
-      </select>
+      <button id="pipe-rec" class="ghost">🎙 Record</button>
+      <span id="pipe-rec-status" class="muted small"></span>
+      <label class="muted small" style="margin-left:auto">target:</label>
+      <select id="pipe-target"></select>
       <button id="pipe-run">Run</button>
     </div>
     <div id="pipe-out" class="muted small" style="margin-top:10px"></div>`;
-  d.appendChild(pipe);
+  p.appendChild(card);
+
+  $('#pipe-file').onchange = (e) => { _pipeState.file = e.target.files[0] || null;
+    if (_pipeState.file) $('#pipe-out').textContent = 'ready: ' + _pipeState.file.name; };
+
+  $('#pipe-rec').onclick = () => toggleRecord();
+  $('#pipe-run').onclick = () => runPipeline();
+
+  await updatePipeLangs(st);
+}
+
+async function updatePipeLangs(st) {
+  const sel = $('#pipe-target'); if (!sel) return;
+  // Prefer the live engine's list; fall back to the catalog endpoint.
+  let langs = (st && st.tts && st.tts.languages) || _pipeState.langs;
+  if (!langs) { try { const r = await api('/api/languages'); langs = r.languages; } catch (e) { langs = ['English']; } }
+  _pipeState.langs = langs;
+  const prev = sel.value;
+  sel.innerHTML = langs.map(l => `<option>${l}</option>`).join('');
+  if (prev && langs.includes(prev)) sel.value = prev;
+}
+
+function toggleRecord() {
+  if (_pipeState.recording) { stopRecord(); return; }
+  if (!navigator.mediaDevices || !window.MediaRecorder) {
+    toast('recording not supported in this browser'); return;
+  }
+  navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+    _pipeState.stream = stream;
+    const chunks = [];
+    const mr = new MediaRecorder(stream);
+    mr.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    mr.onstop = () => {
+      _pipeState.blob = new Blob(chunks, { type: mr.mimeType || 'audio/webm' });
+      _pipeState.file = null;
+      stream.getTracks().forEach(t => t.stop());
+      $('#pipe-rec-status').textContent = 'recorded ✓ (ready to run)';
+    };
+    mr.start();
+    _pipeState.mediaRecorder = mr;
+    _pipeState.recording = true;
+    $('#pipe-rec').textContent = '⏹ Stop';
+    $('#pipe-rec-status').textContent = 'recording…';
+  }).catch(() => toast('microphone permission denied'));
+}
+
+function stopRecord() {
+  if (_pipeState.mediaRecorder && _pipeState.mediaRecorder.state !== 'inactive') {
+    _pipeState.mediaRecorder.stop();
+  }
+  _pipeState.recording = false;
+  $('#pipe-rec').textContent = '🎙 Record';
+}
+
+async function runPipeline() {
   const run = $('#pipe-run');
-  if(run) run.onclick = async ()=>{
-    const f = $('#pipe-file').files[0]; if(!f){ toast('pick an audio file'); return; }
-    run.disabled=true; $('#pipe-out').textContent='running…';
-    const fd = new FormData(); fd.append('file', f); fd.append('target', $('#pipe-target').value);
-    try {
-      const res = await api('/api/pipeline', {method:'POST', body: fd});
-      $('#pipe-out').innerHTML = `<b>You said:</b> ${res.transcript}<br><b>Translated:</b> ${res.translated}`;
-      const au = el('audio'); au.controls=true; au.src='data:audio/wav;base64,'+res.audio_b64; pipe.appendChild(au); au.play();
-    } catch(e){ $('#pipe-out').textContent='error: '+e.message; }
-    run.disabled=false;
-  };
+  let file = _pipeState.file;
+  let fname = 'audio.wav';
+  if (_pipeState.blob) { file = new File([_pipeState.blob], 'recording.webm', { type: _pipeState.blob.type }); fname = 'recording.webm'; }
+  if (!file) { toast('pick a file or record first'); return; }
+  run.disabled = true; $('#pipe-out').textContent = 'running…';
+  const fd = new FormData(); fd.append('file', file, fname);
+  fd.append('target', $('#pipe-target').value);
+  try {
+    const res = await api('/api/pipeline', { method: 'POST', body: fd });
+    $('#pipe-out').innerHTML = `<b>You said:</b> ${res.transcript}<br><b>Translated:</b> ${res.translated}`;
+    const old = $('#pipeline audio'); if (old) old.remove();
+    const au = el('audio'); au.controls = true; au.src = 'data:audio/wav;base64,' + res.audio_b64;
+    $('#pipeline .card').appendChild(au); au.play();
+  } catch (e) { $('#pipe-out').textContent = 'error: ' + e.message; }
+  run.disabled = false;
 }
 
 // ---------------------------------------------------------------- boot

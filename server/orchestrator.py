@@ -320,6 +320,31 @@ def finish_setup() -> dict:
     return {"ok": True, "chosen": chosen()}
 
 
+# Languages each TTS model can speak, mirrored here so the UI can populate the
+# target dropdown from the catalog even when the TTS engine isn't running yet.
+_TTS_LANGUAGES = {
+    "qwen3-0.6b": ["English", "Spanish", "French", "German", "Italian",
+                   "Japanese", "Korean", "Portuguese", "Russian", "Chinese"],
+    "qwen3-1.7b": ["English", "Spanish", "French", "German", "Italian",
+                   "Japanese", "Korean", "Portuguese", "Russian", "Chinese"],
+    "supertonic-3": ["English", "Spanish", "French", "German", "Italian",
+                     "Portuguese", "Russian", "Japanese", "Korean", "Chinese",
+                     "Dutch", "Polish", "Turkish", "Ukrainian", "Vietnamese",
+                     "Czech", "Danish", "Finnish", "Greek", "Hungarian",
+                     "Indonesian", "Romanian", "Swedish", "Bulgarian",
+                     "Croatian", "Estonian", "Lithuanian", "Latvian",
+                     "Slovak", "Slovenian", "Arabic"],
+}
+
+
+@app.get("/api/languages")
+def languages() -> dict:
+    """Target languages for the currently chosen TTS model."""
+    tts_id = chosen().get("tts", "")
+    return {"tts_model": tts_id,
+            "languages": _TTS_LANGUAGES.get(tts_id, ["English"])}
+
+
 # ------------------------------------------------------------------- stack state
 def _free_ram_mib() -> int:
     try:

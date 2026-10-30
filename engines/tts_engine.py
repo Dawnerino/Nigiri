@@ -68,6 +68,29 @@ _QWEN_LANGS = {"auto", "chinese", "english", "french", "german", "italian",
                "japanese", "korean", "portuguese", "russian", "spanish"}
 
 
+# The languages each TTS model can actually speak, as human-readable names the
+# UI shows. The pipeline's target dropdown is populated from the *selected* TTS
+# model's list, so a Qwen3 user sees 10 and a Supertonic user sees 31.
+_MODEL_LANGUAGES = {
+    "qwen3-0.6b": ["English", "Spanish", "French", "German", "Italian",
+                   "Japanese", "Korean", "Portuguese", "Russian", "Chinese"],
+    "qwen3-1.7b": ["English", "Spanish", "French", "German", "Italian",
+                   "Japanese", "Korean", "Portuguese", "Russian", "Chinese"],
+    "supertonic-3": ["English", "Spanish", "French", "German", "Italian",
+                     "Portuguese", "Russian", "Japanese", "Korean", "Chinese",
+                     "Dutch", "Polish", "Turkish", "Ukrainian", "Vietnamese",
+                     "Czech", "Danish", "Finnish", "Greek", "Hungarian",
+                     "Indonesian", "Romanian", "Swedish", "Bulgarian",
+                     "Croatian", "Estonian", "Lithuanian", "Latvian",
+                     "Slovak", "Slovenian", "Arabic"],
+}
+
+
+def supported_languages() -> list[str]:
+    """Human-readable languages the currently selected TTS model can speak."""
+    return list(_MODEL_LANGUAGES.get(MODEL, ["English"]))
+
+
 def _qwen_lang(lang: str) -> str:
     if not lang:
         return "auto"
@@ -151,7 +174,14 @@ def _synthesize_qwen3(text: str, voice: str, lang: str) -> bytes:
 def health() -> dict:
     return {"ok": True, "engine": ENGINE, "model": MODEL,
             "device": _resident["device"] or DEVICE, "resident": _resident["loaded"],
+            "languages": supported_languages(),
             "error": _resident["error"]}
+
+
+@app.get("/languages")
+def languages() -> dict:
+    """Languages the selected TTS model can speak (drives the UI target list)."""
+    return {"model": MODEL, "languages": supported_languages()}
 
 
 @app.post("/v1/audio/speech")
