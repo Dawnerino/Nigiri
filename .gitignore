@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.python-version
+
+# uv
+uv.lock
+
+# Downloaded runtimes (llama.cpp / whisper.cpp binaries) - fetched on first run
+bin/*
+!bin/.gitkeep
+
+# Downloaded model weights - fetched on first run, can be many GB
+models/*
+!models/.gitkeep
+
+# Runtime state: logs, pid files, chosen-model config, job progress
+runtime/*
+!runtime/.gitkeep
+
+# User-supplied reference audio / voice profiles
+data/voices/*
+!data/voices/.gitkeep
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

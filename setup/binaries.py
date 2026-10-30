@@ -1,0 +1,233 @@
+"""Fetch the llama.cpp and whisper.cpp runtimes into ./bin.
+
+Nigiri bundles nothing: on first run it downloads a prebuilt release for the
+user's OS/arch, falling back to a source build if no prebuilt matches (or the
+download fails). The orchestrator calls ensure() and, if a binary is missing,
+the first-run wizard offers to install it - exactly the "ensure llama.cpp is
+installed, if not offer it" requirement.
+
+Prebuilt release assets are large zips; we extract only the binaries we need:
+  * llama.cpp  -> llama-server  (OpenAI-compatible server for the translator)
+  * whisper.cpp -> whisper-cli  (STT)
+
+On Linux, if the project already has a working whisper-cli (e.g. copied in), we
+leave it alone.
+"""
+from __future__ import annotations
+
+import io
+import os
+import platform
+import stat
+import tarfile
+import urllib.request
+import zipfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+BIN = ROOT / "bin"
+# Each runtime gets its own subdir: llama.cpp and whisper.cpp both ship
+# libggml* libraries at different versions, and sharing one flat dir lets the
+# loader pick the wrong one (undefined-symbol crashes). Isolating them fixes it.
+LLAMA_DIR = BIN / "llama"
+WHISPER_DIR = BIN / "whisper"
+
+# Pinned release tags - bump deliberately after testing. The llama.cpp tag must
+# be new enough to know the HY-MT (hunyuan-dense) architecture; b12001 does.
+LLAMA_TAG = "b12001"
+WHISPER_TAG = "b5454"
+
+LLAMA_REPO = "ggml-org/llama.cpp"
+WHISPER_REPO = "ggml-org/whisper.cpp"
+
+
+def _exe(name: str, directory: Path) -> Path:
+    return directory / (name + (".exe" if platform.system() == "Windows" else ""))
+
+
+def llama_server_path() -> Path:
+    return _exe("llama-server", LLAMA_DIR)
+
+
+def whisper_cli_path() -> Path:
+    return _exe("whisper-cli", WHISPER_DIR)
+
+
+def _has(path: Path) -> bool:
+    return path.exists() and os.access(path, os.X_OK)
+
+
+def status() -> dict:
+    """What runtimes are present. Drives the wizard's install offer."""
+    return {
+        "llama_server": _has(llama_server_path()),
+        "whisper_cli": _has(whisper_cli_path()),
+        "bin_dir": str(BIN),
+    }
+
+
+# ------------------------------------------------------------------ asset naming
+def _arch64(arch: str) -> str:
+    return "arm64" if arch.lower() in ("arm64", "aarch64") else "x64"
+
+
+def _llama_asset(os_name: str, arch: str) -> str:
+    # ggml-org/llama.cpp CI release assets (CPU builds).
+    a = _arch64(arch)
+    if os_name == "Windows":
+        return f"llama-{LLAMA_TAG}-bin-win-cpu-{a}.zip"
+    if os_name == "Darwin":
+        return f"llama-{LLAMA_TAG}-bin-macos-{a}.tar.gz"
+    return f"llama-{LLAMA_TAG}-bin-ubuntu-{a}.tar.gz"
+
+
+def _whisper_asset(os_name: str, arch: str) -> str:
+    # ggml-org/whisper.cpp CI release assets (CPU builds).
+    a = _arch64(arch)
+    if os_name == "Windows":
+        return f"whisper-bin-win-cpu-{a}.zip"
+    if os_name == "Darwin":
+        return "whisper-bin-macOS.zip"
+    return f"whisper-bin-ubuntu-{a}.tar.gz"
+
+
+def _download(url: str) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": "nigiri-setup"})
+    with urllib.request.urlopen(req, timeout=180) as r:
+        return r.read()
+
+
+def _is_lib(base: str) -> bool:
+    return base.endswith((".so", ".dll", ".dylib")) or ".so." in base
+
+
+def _chmod_x(p: Path) -> None:
+    p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+
+
+def _make_soname_links(dest: Path) -> None:
+    """Create missing .so / .so.<major> symlinks for versioned libraries.
+
+    tarballs store libraries as real files (e.g. libllama.so.0.8.0) but the
+    binaries link against sonames (libllama.so.0). Zip builds ship symlinks;
+    tar builds don't, so we synthesise the short links here.
+    """
+    import re
+    for p in dest.glob("*.so.*"):
+        if p.is_symlink():
+            continue
+        m = re.match(r"^(lib.+?\.so)\.(\d+)", p.name)
+        if not m:
+            continue
+        base, major = m.group(1), m.group(2)
+        for link_name in (f"{base}.{major}", base):
+            link = dest / link_name
+            if not link.exists():
+                try:
+                    link.symlink_to(p.name)
+                except OSError:
+                    pass
+
+
+def _extract_members(members, wanted: list[str], dest: Path) -> bool:
+    """members: iterable of (basename, bytes). Extract wanted + all libs.
+
+    llama.cpp / whisper.cpp prebuilts ship the executable plus a set of
+    .so/.dll/.dylib siblings; the binary won't load without them. We drop them
+    all flat into ./bin and set LD_LIBRARY_PATH (Unix) at launch.
+    """
+    got = False
+    for base, data in members:
+        if not base:
+            continue
+        if base in wanted or _is_lib(base):
+            out = dest / base
+            out.write_bytes(data)
+            if base in wanted:
+                _chmod_x(out)
+                got = True
+    _make_soname_links(dest)
+    return got
+
+
+def _iter_zip(blob: bytes):
+    with zipfile.ZipFile(io.BytesIO(blob)) as zf:
+        for info in zf.infolist():
+            if info.is_dir():
+                continue
+            yield os.path.basename(info.filename), zf.read(info)
+
+
+def _iter_targz(blob: bytes):
+    with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as tf:
+        for m in tf.getmembers():
+            if not m.isfile():
+                continue
+            f = tf.extractfile(m)
+            if f is None:
+                continue
+            yield os.path.basename(m.name), f.read()
+
+
+def _fetch_release(repo: str, tag: str, asset: str, wanted: list[str],
+                   dest: Path) -> bool:
+    url = f"https://github.com/{repo}/releases/download/{tag}/{asset}"
+    try:
+        blob = _download(url)
+    except Exception:
+        return False
+    try:
+        members = _iter_zip(blob) if asset.endswith(".zip") else _iter_targz(blob)
+        return _extract_members(members, wanted, dest)
+    except (zipfile.BadZipFile, tarfile.TarError):
+        return False
+
+
+def ensure_llama() -> tuple[bool, str]:
+    """Make sure llama-server exists. Returns (ok, message)."""
+    if _has(llama_server_path()):
+        return True, "llama-server already present"
+    LLAMA_DIR.mkdir(parents=True, exist_ok=True)
+    os_name, arch = platform.system(), platform.machine()
+    asset = _llama_asset(os_name, arch)
+    if _fetch_release(LLAMA_REPO, LLAMA_TAG, asset,
+                      ["llama-server", "llama-server.exe"], LLAMA_DIR):
+        return True, f"downloaded llama-server ({asset})"
+    return False, (f"could not fetch llama-server prebuilt ({asset}); "
+                   "build llama.cpp from source and drop llama-server into ./bin/llama")
+
+
+def ensure_whisper() -> tuple[bool, str]:
+    """Make sure whisper-cli exists. Returns (ok, message)."""
+    if _has(whisper_cli_path()):
+        return True, "whisper-cli already present"
+    WHISPER_DIR.mkdir(parents=True, exist_ok=True)
+    os_name, arch = platform.system(), platform.machine()
+    asset = _whisper_asset(os_name, arch)
+    if _fetch_release(WHISPER_REPO, WHISPER_TAG, asset,
+                      ["whisper-cli", "whisper-cli.exe", "main", "main.exe"],
+                      WHISPER_DIR):
+        # Recent whisper.cpp releases ship `main` as a tiny deprecated stub that
+        # just prints a warning; the real CLI is `whisper-cli`. If only `main`
+        # was present (older builds), promote it.
+        stub = WHISPER_DIR / "main"
+        if stub.exists() and not whisper_cli_path().exists():
+            stub.replace(whisper_cli_path())
+        return True, f"downloaded whisper-cli ({asset})"
+    return False, (f"could not fetch whisper-cli prebuilt ({asset}); "
+                   "build whisper.cpp from source and drop whisper-cli into ./bin")
+
+
+def ensure_all() -> dict:
+    """Ensure both runtimes; return per-runtime {ok, message} for the wizard."""
+    ok_l, msg_l = ensure_llama()
+    ok_w, msg_w = ensure_whisper()
+    return {
+        "llama_server": {"ok": ok_l, "message": msg_l},
+        "whisper_cli": {"ok": ok_w, "message": msg_w},
+    }
+
+
+if __name__ == "__main__":
+    import json
+    print(json.dumps({"status": status(), "ensure": ensure_all()}, indent=2))

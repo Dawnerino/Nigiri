@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nigiri 🍣 — local voice pipeline</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --ink:#e8eaf0; --muted:#9aa3b2;
+    --line:#2a2f3a; --accent:#ff5a5f; --accent2:#ffb454; --ok:#3ecf8e; --gpu:#5aa9ff;
+    --cpu:#b98cff; --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  header{display:flex;align-items:center;gap:12px;padding:18px 24px;border-bottom:1px solid var(--line)}
+  header .logo{font-size:26px}
+  header h1{font-size:18px;margin:0;font-weight:650}
+  header .tag{color:var(--muted);font-size:13px}
+  header .spacer{flex:1}
+  main{max-width:1080px;margin:0 auto;padding:24px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px;margin-bottom:18px}
+  .card h2{margin:0 0 4px;font-size:16px}
+  .card .sub{color:var(--muted);font-size:13px;margin-bottom:14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+  .stat{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .stat .k{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  .stat .v{font-size:18px;font-weight:650;margin-top:2px}
+  .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;
+    font-size:12px;font-weight:600;border:1px solid var(--line)}
+  .pill.gpu{color:var(--gpu);border-color:#274a6b;background:#16202e}
+  .pill.cpu{color:var(--cpu);border-color:#3a2c52;background:#1d1730}
+  .pill.ok{color:var(--ok);border-color:#234d3a;background:#14241d}
+  .pill.down{color:var(--accent);border-color:#5a2b2d;background:#241416}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+  .dot.up{background:var(--ok)} .dot.down{background:var(--accent)}
+  button{background:var(--accent);color:#fff;border:0;border-radius:10px;padding:10px 16px;
+    font-size:14px;font-weight:600;cursor:pointer}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
+  button.mini{padding:5px 10px;font-size:12px;border-radius:8px}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .model{display:flex;gap:12px;align-items:flex-start;padding:12px;border:1px solid var(--line);
+    border-radius:10px;margin-bottom:8px;cursor:pointer;background:var(--panel2)}
+  .model.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+  .model input{margin-top:4px}
+  .model .name{font-weight:650}
+  .model .meta{color:var(--muted);font-size:12.5px;margin-top:3px}
+  .model .right{margin-left:auto;text-align:right;color:var(--muted);font-size:12px;white-space:nowrap}
+  .bar{height:6px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:8px}
+  .bar>i{display:block;height:100%;background:var(--accent2);width:0%}
+  .bar.over>i{background:var(--accent)}
+  .budget{margin:4px 0 14px;padding:14px 16px;border:1px solid var(--line);
+    border-radius:var(--radius);background:var(--panel)}
+  .budget .btitle{font-weight:650;font-size:13px;margin-bottom:8px}
+  .budget .brow{display:flex;align-items:center;gap:12px;margin:6px 0}
+  .budget .bk{width:92px;color:var(--muted);font-size:12.5px;white-space:nowrap}
+  .budget .bar{flex:1;margin:0}
+  .budget .bv{width:120px;text-align:right;font-size:12px;white-space:nowrap}
+  .budget .bv.ok{color:var(--ok)} .budget .bv.bad{color:var(--accent)}
+  .budget .bwarn{margin-top:8px;color:var(--accent);font-size:12.5px}
+  .speed{display:inline-flex;gap:3px;vertical-align:middle}
+  .speed i{width:10px;height:10px;border-radius:2px;background:var(--line);display:inline-block}
+  .speed i.on{background:var(--ok)}
+  .muted{color:var(--muted)} .small{font-size:12.5px}
+  .step{display:none} .step.on{display:block}
+  .nav{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+  .nav .n{padding:6px 12px;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-size:13px}
+  .nav .n.on{color:var(--ink);border-color:var(--accent)}
+  .langbadge{font-size:11px;color:var(--accent2);font-weight:600}
+  select,input[type=text]{background:var(--panel2);color:var(--ink);border:1px solid var(--line);
+    border-radius:8px;padding:8px 10px;font-size:14px}
+  .flex1{flex:1}
+  audio{width:100%;margin-top:10px}
+  .toast{position:fixed;bottom:20px;right:20px;background:var(--panel2);border:1px solid var(--line);
+    padding:12px 16px;border-radius:10px;display:none;max-width:360px}
+</style>
+</head>
+<body>
+<header>
+  <span class="logo">🍣</span>
+  <div>
+    <h1>Nigiri</h1>
+    <div class="tag">hand-pressed local voice — speech · translate · speech</div>
+  </div>
+  <div class="spacer"></div>
+  <span id="bind-pill" class="pill">localhost</span>
+</header>
+<main>
+  <div id="wizard"></div>
+  <div id="dashboard" style="display:none"></div>
+</main>
+<div id="toast" class="toast"></div>
+<script>
+const $ = (s, r=document) => r.querySelector(s);
+const el = (t, c, h) => { const e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e; };
+const api = async (path, opts) => {
+  const r = await fetch(path, opts);
+  const ct = r.headers.get('content-type')||'';
+  const body = ct.includes('json') ? await r.json() : await r.text();
+  if(!r.ok) throw new Error((body && body.detail) || r.statusText);
+  return body;
+};
+const post = (path, json) => api(path, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(json||{})});
+const mib = (m) => m>=1024 ? (m/1024).toFixed(1)+' GB' : Math.round(m)+' MB';
+const speedBar = (s) => { let h='<span class="speed">'; for(let i=1;i<=5;i++) h+=`<i class="${i<=s?'on':''}"></i>`; return h+'</span>'; };
+const langBadge = (n) => n==null ? '<span class="langbadge">English only</span>' : `<span class="langbadge">${n} languages</span>`;
+const toast = (msg) => { const t=$('#toast'); t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none', 5000); };
+
+let STATUS = null;          // /api/setup/status
+let PICK = {stt:'', translator:'', tts:''};
+
+function modelCard(kind, m, recommended) {
+  const wrap = el('label', 'model');
+  wrap.dataset.kind = kind; wrap.dataset.id = m.id;
+  const dev = (m.vram_mib>0 && STATUS.recommendation.prefer_gpu) ? 'gpu' : 'cpu';
+  wrap.innerHTML = `
+    <input type="radio" name="${kind}" value="${m.id}">
+    <div class="flex1">
+      <div class="name">${m.label} ${recommended?'<span class="pill ok">recommended</span>':''}</div>
+      <div class="meta">${m.note||''}</div>
+      <div class="meta">${langBadge(m.languages)} &nbsp; speed ${speedBar(m.speed)}</div>
+    </div>
+    <div class="right">
+      <div>${mib(m.download_mib)} download</div>
+      <div>${mib(dev==='gpu'?m.vram_mib:m.ram_mib)} ${dev==='gpu'?'VRAM':'RAM'}</div>
+      <div><span class="pill ${dev}">${dev.toUpperCase()}</span></div>
+    </div>`;
+  wrap.addEventListener('click', () => selectModel(kind, m.id));
+  return wrap;
+}
+
+function selectModel(kind, id) {
+  PICK[kind] = id;
+  document.querySelectorAll(`.model[data-kind="${kind}"]`).forEach(c =>
+    c.classList.toggle('sel', c.dataset.id===id));
+  const inp = document.querySelector(`.model[data-kind="${kind}"][data-id="${id}"] input`);
+  if(inp) inp.checked = true;
+  updateChooseBtn();
+}
+
+function updateChooseBtn() {
+  const btn = $('#choose-btn');
+  if(btn) btn.disabled = !(PICK.stt && PICK.translator && PICK.tts);
+  updateBudget();
+}
+
+// Combined concurrent footprint of the current PICK, mirroring the server's
+// recommend._budget(). Warns when the three engines won't fit in VRAM/RAM at
+// the same time, which a per-model view can hide.
+function computeBudget() {
+  const p = STATUS.profile;
+  const freeVram = p.vram_free_mib || 0, ram = p.ram_mib || 0, head = 400;
+  let vram = 0, ramT = 0;
+  for (const kind of ['stt','translator','tts']) {
+    const m = STATUS.catalog[kind].find(e => e.id === PICK[kind]);
+    if (!m) continue;
+    const dev = (m.vram_mib > 0 && p.has_gpu && m.vram_mib + head <= freeVram) ? 'gpu' : 'cpu';
+    if (dev === 'gpu') vram += m.vram_mib; else ramT += m.ram_mib;
+  }
+  const vramOk = !freeVram || (vram + head <= freeVram);
+  const ramOk = ramT <= ram;
+  return {vram, freeVram, vramOk, ramT, ram, ramOk, ok: vramOk && ramOk};
+}
+
+function updateBudget() {
+  const box = $('#budget');
+  if (!box) return;
+  const b = computeBudget();
+  const vpct = b.freeVram ? Math.min(100, Math.round(b.vram / b.freeVram * 100)) : 0;
+  const rpct = b.ram ? Math.min(100, Math.round(b.ramT / b.ram * 100)) : 0;
+  const line = (label, used, total, pct, ok) => `
+    <div class="brow"><span class="bk">${label}</span>
+      <div class="bar ${ok?'':'over'}"><i style="width:${pct}%"></i></div>
+      <span class="bv ${ok?'ok':'bad'}">${mib(used)} / ${mib(total)}</span></div>`;
+  let html = `<div class="btitle">Combined footprint if all three run at once</div>`;
+  if (b.freeVram) html += line('VRAM', b.vram, b.freeVram, vpct, b.vramOk);
+  html += line('System RAM', b.ramT, b.ram, rpct, b.ramOk);
+  if (!b.ok) {
+    html += `<div class="bwarn">⚠ These models may not fit together. Pick a smaller one, or Nigiri will place some on CPU.</div>`;
+  }
+  box.innerHTML = html;
+}
+
+function stepNav(active) {
+  const steps = ['Your machine','Runtimes','Choose models','Download'];
+  const n = el('div','nav');
+  steps.forEach((s,i)=>{ n.appendChild(el('div','n'+(i===active?' on':''), s)); });
+  return n;
+}
+
+function renderWizard() {
+  const w = $('#wizard'); w.innerHTML='';
+  w.appendChild(stepNav(STATUS._step||0));
+  const step = STATUS._step||0;
+  if(step===0) return renderStepMachine(w);
+  if(step===1) return renderStepRuntimes(w);
+  if(step===2) return renderStepChoose(w);
+  if(step===3) return renderStepDownload(w);
+}
+
+function renderStepMachine(w) {
+  const p = STATUS.profile, r = STATUS.recommendation;
+  const card = el('div','card');
+  card.innerHTML = `<h2>Your machine</h2><div class="sub">Nigiri reads your specs and recommends a model set that fits. You can override every choice.</div>`;
+  const grid = el('div','grid');
+  const stats = [
+    ['CPU', `${p.cpu_cores} cores`],
+    ['System RAM', mib(p.ram_mib)],
+    ['GPU', p.has_gpu ? p.gpu_name : 'none (CPU only)'],
+    ['VRAM', p.has_gpu ? `${mib(p.vram_total_mib)} (${mib(p.vram_free_mib)} free)` : '—'],
+  ];
+  stats.forEach(([k,v])=>{ const s=el('div','stat'); s.innerHTML=`<div class="k">${k}</div><div class="v">${v}</div>`; grid.appendChild(s); });
+  card.appendChild(grid);
+  const rec = el('div',''); rec.style.marginTop='16px';
+  rec.innerHTML = `<div class="sub">Recommended for this machine:</div>` +
+    ['stt','translator','tts'].map(k=>{
+      const m = STATUS.catalog[k].find(e=>e.id===r.models[k].id);
+      return `<div class="row" style="margin:6px 0"><span class="pill ${r.models[k].device}">${r.models[k].device.toUpperCase()}</span> <b>${m.label}</b> <span class="muted small">— ${r.models[k].reason}</span></div>`;
+    }).join('');
+  card.appendChild(rec);
+  const b = r.budget || {};
+  if (b.vram_total_mib != null) {
+    const bud = el('div', ''); bud.style.marginTop = '12px';
+    const vramLine = b.freeVram || b.vram_free_mib
+      ? `<div class="row small muted">VRAM if all three run at once: <b>${mib(b.vram_total_mib)}</b> of ${mib(b.vram_free_mib)} free ${b.vram_ok ? '✓ fits' : '⚠ tight'}</div>` : '';
+    const ramLine = `<div class="row small muted">System RAM for CPU models: <b>${mib(b.ram_total_mib)}</b> of ${mib(b.ram_total_mib ? STATUS.profile.ram_mib : 0)} ${b.ram_ok ? '✓ fits' : '⚠ tight'}</div>`;
+    bud.innerHTML = vramLine + ramLine;
+    card.appendChild(bud);
+  }
+  const next = el('button','','Next: check runtimes →'); next.style.marginTop='16px';
+  next.onclick = ()=>{ STATUS._step=1; renderWizard(); };
+  card.appendChild(next);
+  w.appendChild(card);
+}
+
+
+function renderStepRuntimes(w) {
+  const b = STATUS.binaries;
+  const card = el('div','card');
+  card.innerHTML = `<h2>Runtimes (llama.cpp + whisper.cpp)</h2><div class="sub">Nigiri runs on llama.cpp and whisper.cpp. They are downloaded into ./bin — nothing is installed system-wide.</div>`;
+  const rows = el('div','');
+  const mk = (name, ok) => { const d=el('div','row'); d.style.margin='8px 0';
+    d.innerHTML = `<span class="dot ${ok?'up':'down'}"></span> <b>${name}</b> <span class="pill ${ok?'ok':'down'}">${ok?'installed':'missing'}</span>`; return d; };
+  rows.appendChild(mk('llama-server (llama.cpp)', b.llama_server));
+  rows.appendChild(mk('whisper-cli (whisper.cpp)', b.whisper_cli));
+  card.appendChild(rows);
+  const actions = el('div','row'); actions.style.marginTop='14px';
+  if(!(b.llama_server && b.whisper_cli)) {
+    const inst = el('button','','Install missing runtimes');
+    inst.onclick = async (e)=>{ e.target.disabled=true; e.target.textContent='Installing…';
+      try {
+        const res = await post('/api/setup/install_binaries');
+        STATUS.binaries = {llama_server:res.llama_server.ok, whisper_cli:res.whisper_cli.ok};
+        toast('llama-server: '+res.llama_server.message+'  |  whisper-cli: '+res.whisper_cli.message);
+      } catch(err){ toast('install failed: '+err.message); }
+      renderStepRuntimes(w); };
+    actions.appendChild(inst);
+  }
+  const next = el('button','ghost','Next: choose models →');
+  next.onclick = ()=>{ STATUS._step=2; renderWizard(); };
+  actions.appendChild(next);
+  card.appendChild(actions);
+  w.appendChild(card);
+}
+
+function renderStepChoose(w) {
+  const r = STATUS.recommendation;
+  ['stt','translator','tts'].forEach(kind=>{
+    const titles = {stt:'Speech-to-text (Whisper)', translator:'Translation (HY-MT via llama.cpp)', tts:'Text-to-speech'};
+    const card = el('div','card');
+    card.innerHTML = `<h2>${titles[kind]}</h2><div class="sub">Download size · projected speed · memory it uses. ${r.prefer_gpu?'You have free VRAM — GPU placement is offered where it fits.':'No spare VRAM — CPU-friendly models are recommended.'}</div>`;
+    STATUS.catalog[kind].forEach(m=>{
+      const rec = r.models[kind].id===m.id;
+      card.appendChild(modelCard(kind, m, rec));
+      if(rec && !PICK[kind]) { PICK[kind]=m.id; }
+    });
+    w.appendChild(card);
+  });
+  const budget = el('div','budget'); budget.id='budget';
+  w.appendChild(budget);
+  const actions = el('div','row');
+  const back = el('button','ghost','← Back'); back.onclick=()=>{STATUS._step=1;renderWizard();};
+  const go = el('button','','Download chosen models →'); go.id='choose-btn';
+  go.onclick = async ()=>{
+    go.disabled=true; go.textContent='Starting downloads…';
+    try { await post('/api/setup/choose', PICK); STATUS._step=3; renderStepDownload(w); }
+    catch(err){ toast(err.message); go.disabled=false; go.textContent='Download chosen models →'; }
+  };
+  actions.appendChild(back); actions.appendChild(go);
+  w.appendChild(actions);
+  // preselect recommended
+  ['stt','translator','tts'].forEach(k=>{ if(PICK[k]) selectModel(k, PICK[k]); });
+  updateChooseBtn();
+}
+
+function renderStepDownload(w) {
+  const card = el('div','card');
+  card.innerHTML = `<h2>Downloading your models</h2><div class="sub">Weights are saved into ./models. This runs once; later launches skip it.</div>`;
+  const list = el('div',''); list.id='dl-list'; card.appendChild(list);
+  const bar = el('div','bar'); bar.innerHTML='<i></i>'; card.appendChild(bar);
+  const status = el('div','muted small'); status.id='dl-status'; status.style.marginTop='8px'; card.appendChild(status);
+  const finish = el('button','','Start Nigiri →'); finish.id='dl-finish'; finish.disabled=true; finish.style.marginTop='14px';
+  finish.onclick = async ()=>{ finish.disabled=true; finish.textContent='Starting engines…';
+    try { await post('/api/setup/finish'); } catch(e){ toast(e.message); }
+    setTimeout(boot, 1500); };
+  card.appendChild(finish);
+  w.appendChild(card);
+  pollDownload();
+}
+
+async function pollDownload() {
+  try {
+    const s = await api('/api/setup/download_status');
+    const list = $('#dl-list'); if(!list) return;
+    list.innerHTML='';
+    let allDone = true;
+    ['stt','translator','tts'].forEach(kind=>{
+      Object.entries(s.downloaded[kind]||{}).forEach(([id,done])=>{
+        if(!done) allDone=false;
+      });
+    });
+    const prog = s.progress||{};
+    const chosen = PICK;
+    ['stt','translator','tts'].forEach(kind=>{
+      const id = chosen[kind]; if(!id) return;
+      const done = (s.downloaded[kind]||{})[id];
+      const m = STATUS.catalog[kind].find(e=>e.id===id);
+      const row = el('div','row'); row.style.margin='6px 0';
+      row.innerHTML = `<span class="dot ${done?'up':'down'}"></span> <b>${m.label}</b> <span class="muted small">${done?'ready':'downloading…'}</span>`;
+      list.appendChild(row);
+    });
+    if(prog.detail) $('#dl-status').textContent = prog.detail + (prog.error?(' — '+prog.error):'');
+    const fill = $('.bar>i'); if(fill) fill.style.width = (prog.percent||0)+'%';
+    const fin = $('#dl-finish'); if(fin) fin.disabled = !allDone;
+    if(!allDone) setTimeout(pollDownload, 1200);
+    else $('#dl-status').textContent = 'All models ready.';
+  } catch(e){ setTimeout(pollDownload, 2000); }
+}
+
+
+// ---------------------------------------------------------------- dashboard
+async function renderDashboard() {
+  const d = $('#dashboard');
+  const st = await api('/api/stack/state');
+  const net = await api('/api/network');
+  $('#bind-pill').textContent = net.host==='0.0.0.0' ? 'LAN (0.0.0.0)' : 'localhost';
+  $('#bind-pill').className = 'pill ' + (net.host==='0.0.0.0'?'gpu':'');
+  d.innerHTML = '';
+
+  // components
+  const comp = el('div','card');
+  comp.innerHTML = `<h2>Voice stack</h2><div class="sub">Each stage runs as its own local service. Switch a model to swap that stage.</div>`;
+  const rows = el('div','');
+  const stageRow = (name, kind, health) => {
+    const up = health && health.up;
+    const dev = st.devices[kind]||'cpu';
+    const r = el('div','row'); r.style.margin='8px 0';
+    r.innerHTML = `<span class="dot ${up?'up':'down'}"></span> <b>${name}</b>
+      <span class="pill ${dev}">${dev.toUpperCase()}</span>
+      <span class="muted small">${(st.chosen&&st.chosen[kind])||''}</span>`;
+    const sel = el('select','mini'); sel.style.marginLeft='auto';
+    STATUS.catalog[kind].forEach(m=>{
+      const o = el('option'); o.value=m.id; o.textContent=m.label + (STATUS.downloaded[kind][m.id]?'':' (not downloaded)');
+      if(st.chosen[kind]===m.id) o.selected=true;
+      if(!STATUS.downloaded[kind][m.id]) o.disabled=true;
+      sel.appendChild(o);
+    });
+    const btn = el('button','mini','Switch'); btn.style.marginLeft='8px';
+    btn.onclick = async ()=>{ btn.disabled=true; try{ await post('/api/model/switch',{kind, id:sel.value}); toast('switching '+kind+' → '+sel.value); setTimeout(renderDashboard,1500);}catch(e){toast(e.message); btn.disabled=false;} };
+    r.appendChild(sel); r.appendChild(btn);
+    return r;
+  };
+  rows.appendChild(stageRow('Speech-to-text','stt', st.stt));
+  rows.appendChild(stageRow('Translation','translator', st.translator));
+  rows.appendChild(stageRow('Text-to-speech','tts', st.tts));
+  comp.appendChild(rows);
+  d.appendChild(comp);
+
+  // memory
+  const mem = el('div','card');
+  const m = st.memory;
+  mem.innerHTML = `<h2>Memory</h2><div class="sub">${m.gpu_name||'No GPU — everything on CPU'}</div>`;
+  const grid = el('div','grid');
+  [['System RAM', `${mib(m.ram_total_mib-m.ram_free_mib)} / ${mib(m.ram_total_mib)}`],
+   ['VRAM free', m.vram_total_mib? mib(m.vram_free_mib):'—'],
+   ['VRAM total', m.vram_total_mib? mib(m.vram_total_mib):'—'],
+   ['Placement', Object.entries(st.devices).map(([k,v])=>`${k}:${v.toUpperCase()}`).join(' ')]
+  ].forEach(([k,v])=>{ const s=el('div','stat'); s.innerHTML=`<div class="k">${k}</div><div class="v">${v}</div>`; grid.appendChild(s); });
+  mem.appendChild(grid);
+  d.appendChild(mem);
+
+  // network
+  const netCard = el('div','card');
+  netCard.innerHTML = `<h2>Network</h2><div class="sub">Where the API + UI are served. LAN lets other devices on your network reach Nigiri.</div>`;
+  const nr = el('div','row');
+  nr.innerHTML = `<span>Bind:</span>
+    <select id="host-sel">
+      <option value="127.0.0.1">localhost only (127.0.0.1)</option>
+      <option value="0.0.0.0">local network (0.0.0.0)</option>
+    </select>
+    <button id="host-btn" class="mini">Apply</button>
+    <span class="muted small">changing this needs a restart of Nigiri</span>`;
+  $('#host-sel', nr) && ($('#host-sel', nr).value = net.host);
+  netCard.appendChild(nr);
+  d.appendChild(netCard);
+  const hs = $('#host-sel'); if(hs) hs.value = net.host;
+  const hb = $('#host-btn'); if(hb) hb.onclick = async ()=>{ try{ await post('/api/network',{host:hs.value}); toast('saved — restart Nigiri to rebind'); }catch(e){toast(e.message);} };
+
+  // pipeline demo
+  const pipe = el('div','card');
+  pipe.innerHTML = `<h2>Try the pipeline</h2><div class="sub">Record or drop audio → transcribe → translate → speak.</div>
+    <div class="row">
+      <input type="file" id="pipe-file" accept="audio/*">
+      <label class="muted small">target:</label>
+      <select id="pipe-target">
+        ${['English','Spanish','French','German','Japanese','Korean','Chinese','Italian','Portuguese','Russian'].map(l=>`<option>${l}</option>`).join('')}
+      </select>
+      <button id="pipe-run">Run</button>
+    </div>
+    <div id="pipe-out" class="muted small" style="margin-top:10px"></div>`;
+  d.appendChild(pipe);
+  const run = $('#pipe-run');
+  if(run) run.onclick = async ()=>{
+    const f = $('#pipe-file').files[0]; if(!f){ toast('pick an audio file'); return; }
+    run.disabled=true; $('#pipe-out').textContent='running…';
+    const fd = new FormData(); fd.append('file', f); fd.append('target', $('#pipe-target').value);
+    try {
+      const res = await api('/api/pipeline', {method:'POST', body: fd});
+      $('#pipe-out').innerHTML = `<b>You said:</b> ${res.transcript}<br><b>Translated:</b> ${res.translated}`;
+      const au = el('audio'); au.controls=true; au.src='data:audio/wav;base64,'+res.audio_b64; pipe.appendChild(au); au.play();
+    } catch(e){ $('#pipe-out').textContent='error: '+e.message; }
+    run.disabled=false;
+  };
+}
+
+// ---------------------------------------------------------------- boot
+async function boot() {
+  STATUS = await api('/api/setup/status');
+  STATUS.downloaded = STATUS.downloaded;
+  if(STATUS.done) {
+    $('#wizard').style.display='none';
+    $('#dashboard').style.display='block';
+    await renderDashboard();
+    setInterval(()=>{ renderDashboard().catch(()=>{}); }, 8000);
+  } else {
+    $('#dashboard').style.display='none';
+    $('#wizard').style.display='block';
+    STATUS._step = 0;
+    renderWizard();
+  }
+}
+boot().catch(e=>{ toast('boot failed: '+e.message); });
+</script>
+</body>
+</html>
+

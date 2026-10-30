@@ -1,0 +1,46 @@
+[project]
+name = "nigiri"
+version = "0.1.0"
+description = "Nigiri - a hand-pressed local voice pipeline: speech-to-text, translation, and text-to-speech, all on your own machine."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Nigiri contributors" }]
+keywords = ["speech", "whisper", "translation", "tts", "llama.cpp", "local-first"]
+
+# The orchestrator + setup tooling. Heavy per-engine runtimes (torch for
+# Qwen3-TTS, onnxruntime for Supertonic) are installed lazily by the first-run
+# wizard so a user who only wants STT+translation never pays for them.
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "httpx>=0.27",
+    "psutil>=5.9",
+    "huggingface-hub>=0.23",
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+# Supertonic 3 TTS: ONNX Runtime, CPU-friendly, no torch.
+supertonic = [
+    "onnxruntime>=1.17",
+    "numpy>=1.24",
+    "soundfile>=0.12",
+]
+# Qwen3-TTS: PyTorch, GPU-friendly, higher quality + instruction prosody.
+qwen3 = [
+    "torch>=2.3",
+    "qwen-tts>=0.1",
+    "numpy>=1.24",
+    "soundfile>=0.12",
+]
+
+[project.scripts]
+nigiri = "run:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["setup", "server", "engines"]
