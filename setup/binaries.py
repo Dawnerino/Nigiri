@@ -114,25 +114,38 @@ def _chmod_x(p: Path) -> None:
 
 
 def _make_soname_links(dest: Path) -> None:
-    """Create missing .so / .so.<major> symlinks for versioned libraries.
+    """Create missing soname symlinks for versioned libraries.
 
-    tarballs store libraries as real files (e.g. libllama.so.0.8.0) but the
-    binaries link against sonames (libllama.so.0). Zip builds ship symlinks;
-    tar builds don't, so we synthesise the short links here.
+    tarballs store libraries as real files (Linux: libllama.so.0.8.0, macOS:
+    libllama-common.0.8.0.dylib) but the binaries link against the short soname
+    (libllama.so.0 / libllama-common.0.dylib). Zip builds ship symlinks; tar
+    builds don't, so we synthesise the short links here.
+
+    macOS needs this just as much as Linux: dyld resolves @rpath against the
+    binary's own LC_RPATH (@loader_path) and ignores LD_LIBRARY_PATH entirely,
+    so a missing libllama-common.0.dylib aborts llama-server at exec time with
+    "Library not loaded: @rpath/libllama-common.0.dylib" - which shows up much
+    later as a ConnectError from the orchestrator, not as a loader error.
     """
     import re
-    for p in dest.glob("*.so.*"):
-        if p.is_symlink():
-            continue
-        m = re.match(r"^(lib.+?\.so)\.(\d+)", p.name)
-        if not m:
-            continue
-        base, major = m.group(1), m.group(2)
-        for link_name in (f"{base}.{major}", base):
-            link = dest / link_name
-            if not link.exists():
+    # (glob, soname regex, link suffix) for the two platforms we ship on.
+    for pattern, rx, suffix in (
+        ("*.so.*", re.compile(r"^(lib.+?\.so)\.(\d+)"), ""),
+        ("*.dylib", re.compile(r"^(lib.+?)\.(\d+)(?:\.\d+)*\.dylib$"), ".dylib"),
+    ):
+        for lib in dest.glob(pattern):
+            if lib.is_symlink():
+                continue
+            m = rx.match(lib.name)
+            if not m:
+                continue
+            base, major = m.group(1), m.group(2)
+            for link_name in (f"{base}.{major}{suffix}", f"{base}{suffix}"):
+                link = dest / link_name
+                if link.is_symlink() or link.exists():
+                    continue
                 try:
-                    link.symlink_to(p.name)
+                    link.symlink_to(lib.name)
                 except OSError:
                     pass
 
