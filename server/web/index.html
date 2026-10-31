@@ -41,6 +41,9 @@
   button.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
   button.mini{padding:5px 10px;font-size:12px;border-radius:8px}
   button:disabled{opacity:.45;cursor:not-allowed}
+  a.btnlink{background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:10px;
+    padding:9px 14px;font-size:14px;font-weight:600;text-decoration:none;display:inline-block}
+  a.btnlink:hover{border-color:var(--accent)}
   .model{display:flex;gap:12px;align-items:flex-start;padding:12px;border:1px solid var(--line);
     border-radius:10px;margin-bottom:8px;cursor:pointer;background:var(--panel2)}
   .model.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
@@ -85,6 +88,7 @@
     <div class="tag">hand-pressed local voice — speech · translate · speech</div>
   </div>
   <div class="spacer"></div>
+  <a class="btnlink" href="/api-docs" style="margin-right:10px" title="How to call each endpoint">📖 API</a>
   <button id="setup-btn" class="ghost" style="margin-right:10px">⚙ Setup</button>
   <span id="bind-pill" class="pill">localhost</span>
 </header>

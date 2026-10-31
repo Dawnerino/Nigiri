@@ -377,6 +377,12 @@ def stack_state() -> dict:
     return {
         "chosen": c,
         "devices": _place_devices(c),
+        # The API reference page renders copy-pasteable curl for these exact
+        # numbers, so they are reported rather than assumed to be the defaults.
+        "ports": {"gateway": current_config().get("port", 8765),
+                  "stt": STT_PORT, "translator": TRANSLATOR_PORT,
+                  "tts": TTS_PORT,
+                  "translator_upstream": TRANSLATOR_PORT + 100},
         "stt": _health(STT_PORT),
         "translator": _health(TRANSLATOR_PORT),
         "tts": _health(TTS_PORT),
@@ -458,6 +464,23 @@ async def speech(payload: dict = Body(...)) -> Response:
                     media_type=r.headers.get("content-type", "application/json"))
 
 
+@app.post("/translate")
+async def translate(payload: dict = Body(...)) -> Response:
+    """Gateway proxy for the translator's plain text->text endpoint."""
+    async with httpx.AsyncClient(timeout=600) as c:
+        r = await c.post(f"http://127.0.0.1:{TRANSLATOR_PORT}/translate", json=payload)
+    return Response(content=r.content, status_code=r.status_code,
+                    media_type=r.headers.get("content-type", "application/json"))
+
+
+@app.get("/health")
+def health() -> dict:
+    """Aggregate liveness for all three stages; each engine also serves /health."""
+    stages = {"stt": _health(STT_PORT), "translator": _health(TRANSLATOR_PORT),
+              "tts": _health(TTS_PORT)}
+    return {"ok": all(s.get("up") for s in stages.values()), "stages": stages}
+
+
 # ------------------------------------------------------------------- pipeline
 def _engine_error(resp) -> str:
     """Pull a human-readable message out of an engine error response.
@@ -509,6 +532,12 @@ async def pipeline(file: UploadFile = File(...), source: str = Form("auto"),
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(WEB / "index.html")
+
+
+@app.get("/api-docs")
+def api_docs() -> FileResponse:
+    """Human reference for calling each stage: forms, payloads and ports."""
+    return FileResponse(WEB / "api.html")
 
 
 @app.get("/api/shutdown")

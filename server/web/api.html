@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nigiri 🍣 — API reference</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --ink:#e8eaf0; --muted:#9aa3b2;
+    --line:#2a2f3a; --accent:#ff5a5f; --accent2:#ffb454; --ok:#3ecf8e; --gpu:#5aa9ff;
+    --cpu:#b98cff; --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  header{display:flex;align-items:center;gap:12px;padding:18px 24px;border-bottom:1px solid var(--line)}
+  header .logo{font-size:26px}
+  header h1{font-size:18px;margin:0;font-weight:650}
+  header .tag{color:var(--muted);font-size:13px}
+  header .spacer{flex:1}
+  main{max-width:1080px;margin:0 auto;padding:24px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px;margin-bottom:18px}
+  .card h2{margin:0 0 4px;font-size:16px}
+  .card .sub{color:var(--muted);font-size:13px;margin-bottom:14px}
+  .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;
+    font-size:12px;font-weight:600;border:1px solid var(--line)}
+  .pill.ok{color:var(--ok);border-color:#234d3a;background:#14241d}
+  .pill.down{color:var(--accent);border-color:#5a2b2d;background:#241416}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+  .dot.up{background:var(--ok)} .dot.down{background:var(--accent)}
+  .muted{color:var(--muted)} .small{font-size:12.5px}
+  button{background:var(--accent);color:#fff;border:0;border-radius:10px;padding:10px 16px;
+    font-size:14px;font-weight:600;cursor:pointer}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
+  button.mini{padding:5px 10px;font-size:12px;border-radius:8px}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  a.btnlink{background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:10px;
+    padding:9px 14px;font-size:14px;font-weight:600;text-decoration:none;display:inline-block}
+  a.btnlink:hover{border-color:var(--accent)}
+  .verb{display:inline-block;padding:2px 9px;border-radius:6px;font-size:11.5px;font-weight:700;
+    letter-spacing:.04em;background:#14241d;color:var(--ok);border:1px solid #234d3a}
+  .verb.get{background:#16202e;color:var(--gpu);border-color:#274a6b}
+  .endpoint{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--panel2);
+    border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:12px 0 10px}
+  .endpoint .u{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13.5px}
+  .endpoint .where{font-size:11.5px;color:var(--muted);margin-left:auto}
+  code{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
+  pre{background:#0c0e12;border:1px solid var(--line);border-radius:10px;padding:14px;
+    overflow:auto;font-size:12.8px;line-height:1.6;margin:0}
+  pre code{background:none;border:0;padding:0}
+  table.f{width:100%;border-collapse:collapse;font-size:13.5px;margin:4px 0}
+  table.f th{text-align:left;color:var(--muted);font-size:11.5px;text-transform:uppercase;
+    letter-spacing:.04em;padding:6px 10px;border-bottom:1px solid var(--line)}
+  table.f td{border-bottom:1px solid var(--line);padding:9px 10px;vertical-align:top}
+  table.f td:first-child{white-space:nowrap}
+  .req{color:var(--accent);font-weight:700;font-size:11.5px}
+  .opt{color:var(--muted);font-size:11.5px}
+  .tabs{display:flex;gap:6px;margin-top:16px}
+  .tabs .t{padding:6px 12px;border:1px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0;
+    color:var(--muted);cursor:pointer;font-size:12.5px;background:transparent}
+  .tabs .t.on{color:var(--ink);background:#0c0e12}
+  .pane{display:none} .pane.on{display:block}
+  .try{margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
+  .out{margin-top:10px;background:#0c0e12;border:1px solid var(--line);border-radius:10px;
+    padding:12px;font-size:13px;white-space:pre-wrap;word-break:break-word;display:none;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .note{border-left:3px solid var(--accent2);background:#1d1730;padding:10px 14px;
+    border-radius:0 10px 10px 0;font-size:13px;margin:12px 0}
+  .note.red{border-left-color:var(--accent);background:#241416}
+  input[type=text],select,textarea{background:var(--panel2);color:var(--ink);
+    border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px}
+  textarea{width:100%;min-height:60px;resize:vertical;font-family:inherit}
+  input[type=file]{color:var(--muted);font-size:13px}
+  audio{width:100%;margin-top:10px}
+  h3{font-size:13px;margin:18px 0 6px;color:var(--muted);font-weight:600;
+    text-transform:uppercase;letter-spacing:.04em}
+  .toast{position:fixed;bottom:20px;right:20px;background:var(--panel2);border:1px solid var(--line);
+    padding:12px 16px;border-radius:10px;display:none;max-width:360px}
+  /* the endpoint column is nowrap by default; on a phone that alone pushes the
+     page sideways, so let it wrap and tighten the gutters instead. */
+  @media (max-width:700px){
+    main{padding:14px}
+    .card{padding:14px}
+    table.f td:first-child{white-space:normal}
+    table.f td{word-break:break-word;overflow-wrap:anywhere}
+    table.f td,table.f th{padding:7px 6px}
+    .endpoint .where{margin-left:0;width:100%}
+  }
+</style>
+</head>
+<body>
+<header>
+  <span class="logo">🍣</span>
+  <div>
+    <h1>Nigiri API</h1>
+    <div class="tag">how to call each stage — one section per model type</div>
+  </div>
+  <div class="spacer"></div>
+  <a class="btnlink" href="/">← Back to Nigiri</a>
+</header>
+<main>
+
+<div class="card">
+  <h2>Your stack right now</h2>
+  <div class="sub">Live from <code>/api/stack/state</code>. Every example below is filled in with these real values.</div>
+  <div class="row" id="live-row"><span class="muted small">reading stack state…</span></div>
+  <div class="row" style="margin-top:12px">
+    <span class="muted small">Base URL for everything on this page:</span>
+    <code id="base">http://localhost:8765</code>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Where to call: two ways into the same models</h2>
+  <div class="sub">The gateway proxies every stage and adds the one-shot pipeline. Each stage also runs as its own
+    service on its own port, so you can talk to a single model directly and skip the rest.</div>
+  <table class="f">
+    <tr><th>Port</th><th>Serves</th><th>Notes</th></tr>
+    <tr><td><code data-p="gateway">8765</code></td>
+        <td>Gateway: web UI + <code>/v1/*</code> + <code>/translate</code> + <code>/api/pipeline</code></td>
+        <td>Start here. This is the port <code>run.sh</code> prints.</td></tr>
+    <tr><td><code data-p="stt">9101</code></td>
+        <td>Speech-to-text (whisper.cpp)</td>
+        <td>Also answers <code>GET /health</code> and <code>GET /v1/models</code>.</td></tr>
+    <tr><td><code data-p="translator">9102</code></td>
+        <td>Translation shim</td>
+        <td>Adds <code>POST /translate</code> on top of the passthrough.</td></tr>
+    <tr><td><code data-p="translator_upstream">9202</code></td>
+        <td>Raw <code>llama-server</code> behind the translator</td>
+        <td>Full llama.cpp OpenAI API, no prompt wrapping.</td></tr>
+    <tr><td><code data-p="tts">9103</code></td>
+        <td>Text-to-speech</td>
+        <td>Also answers <code>GET /health</code> and <code>GET /languages</code>.</td></tr>
+  </table>
+  <div class="note red"><b>Ports 9101–9202 are loopback-only.</b> The engine processes bind to
+    <code>127.0.0.1</code> no matter what you pick in Setup, so they are reachable from this machine only.
+    <code>--host 0.0.0.0</code> (or Setup → Network) rebinds the <i>gateway</i> for LAN use, not the engines.
+    There is no authentication on any of them.</div>
+</div>
+
+<!-- ================================================== 1. speech to text -->
+<div class="card" id="sec-stt">
+  <h2>1 · Speech-to-text</h2>
+  <div class="sub">Audio in, text out. This is the only endpoint that takes a <b>multipart form</b>, so there are
+    no JSON braces involved.</div>
+
+  <div class="endpoint">
+    <span class="verb">POST</span>
+    <span class="u">/v1/audio/transcriptions</span>
+    <span class="where">gateway <code data-p="gateway">8765</code> · direct <code data-p="stt">9101</code></span>
+  </div>
+  <div class="row"><span class="muted small">Content-Type:</span>
+    <code>multipart/form-data</code>
+    <span class="muted small">— returns</span> <code>application/json</code></div>
+
+  <h3>Form fields</h3>
+  <table class="f">
+    <tr><th>Field</th><th></th><th>Accepts</th></tr>
+    <tr><td><code>file</code></td><td><span class="req">required</span></td>
+        <td>The audio. Anything ffmpeg can decode — <code>wav mp3 m4a ogg webm flac mp4</code>.
+            Resampled to 16 kHz mono internally, so sample rate does not matter.</td></tr>
+    <tr><td><code>model</code></td><td><span class="opt">optional</span></td>
+        <td>A downloaded STT model id, e.g. <code data-fill="stt_model">large-v3-turbo-q5_0</code>.
+            <b>Leave it empty</b> to use whatever you chose in Setup.</td></tr>
+    <tr><td><code>language</code></td><td><span class="opt">optional</span></td>
+        <td>ISO-639-1 code (<code>en</code>, <code>es</code>, <code>ja</code>…) or <code>auto</code>. Default <code>auto</code>.</td></tr>
+    <tr><td><code>prompt</code></td><td><span class="opt">optional</span></td>
+        <td>Whisper initial prompt — useful for spelling names and jargon consistently.</td></tr>
+  </table>
+
+  <div class="tabs">
+    <button class="t on" data-pane="stt-curl">curl</button>
+    <button class="t" data-pane="stt-py">Python</button>
+    <button class="t" data-pane="stt-js">JavaScript</button>
+  </div>
+  <div class="pane on" id="stt-curl"><pre><code>curl -X POST http://localhost:<span data-fill="port_gateway">8765</span>/v1/audio/transcriptions \
+  -F file=@speech.wav \
+  -F model=<span data-fill="stt_model">large-v3-turbo-q5_0</span> \
+  -F language=auto</code></pre></div>
+  <div class="pane" id="stt-py"><pre><code>import requests
+
+r = requests.post(
+    "http://localhost:<span data-fill="port_gateway">8765</span>/v1/audio/transcriptions",
+    files={"file": open("speech.wav", "rb")},
+    data={"model": "<span data-fill="stt_model">large-v3-turbo-q5_0</span>",
+          "language": "auto"},
+)
+print(r.json()["text"])</code></pre></div>
+  <div class="pane" id="stt-js"><pre><code>const fd = new FormData();
+fd.append("file", fileInput.files[0]);
+fd.append("language", "auto");   // model omitted → your Setup choice
+
+const r  = await fetch("/v1/audio/transcriptions", { method: "POST", body: fd });
+const { text } = await r.json();</code></pre></div>
+
+  <h3>Response</h3>
+  <pre><code>{
+  "text": "Hello there, how are you today?",
+  "model": "<span data-fill="stt_model">large-v3-turbo-q5_0</span>",
+  "language": "auto",
+  "duration_ms": 2039.5
+}</code></pre>
+
+  <div class="note red"><b><code>model</code> is not <code>whisper-1</code>.</b> It is validated against the models
+    actually downloaded, so the OpenAI default fails with
+    <code>400 unknown model 'whisper-1', have ['<span data-fill="stt_model">large-v3-turbo-q5_0</span>']</code>.
+    Omit the field, or list valid ids with <code>GET http://localhost:<span data-p="stt">9101</span>/v1/models</code>.</div>
+
+  <div class="try">
+    <div class="row">
+      <input type="file" id="stt-file" accept="audio/*,video/*">
+      <select id="stt-lang"><option value="auto">auto</option><option value="en">en</option>
+        <option value="es">es</option><option value="fr">fr</option><option value="ja">ja</option></select>
+      <button id="stt-run">Transcribe</button>
+    </div>
+    <div class="out" id="stt-out"></div>
+  </div>
+</div>
+
+<!-- ==================================================== 2. translation -->
+<div class="card" id="sec-translator">
+  <h2>2 · Translation</h2>
+  <div class="sub">Text in, text out — JSON body, no file. Two shapes: a purpose-built one that returns just the
+    translation, and an OpenAI passthrough if you already have a chat client.</div>
+
+  <div class="endpoint">
+    <span class="verb">POST</span>
+    <span class="u">/translate</span>
+    <span class="where">gateway <code data-p="gateway">8765</code> · direct <code data-p="translator">9102</code></span>
+  </div>
+  <div class="row"><span class="muted small">Content-Type:</span>
+    <code>application/json</code> <span class="muted small">— returns</span> <code>application/json</code></div>
+
+  <h3>JSON body</h3>
+  <table class="f">
+    <tr><th>Key</th><th></th><th>Accepts</th></tr>
+    <tr><td><code>text</code></td><td><span class="req">required</span></td>
+        <td>The string to translate. Empty → <code>400 text required</code>.</td></tr>
+    <tr><td><code>target</code></td><td><span class="opt">optional</span></td>
+        <td>A <b>full language name</b> — <code>Spanish</code>, <code>Japanese</code>, <code>English</code>.
+            Not a code. Default <code>English</code>. This is the only key that steers the output.</td></tr>
+    <tr><td><code>source</code></td><td><span class="opt">optional</span></td>
+        <td>Informational — echoed back in the response but <b>never sent to the model</b>, which detects the
+            source language itself. Safe to omit.</td></tr>
+  </table>
+
+  <div class="tabs">
+    <button class="t on" data-pane="tr-curl">curl</button>
+    <button class="t" data-pane="tr-py">Python</button>
+    <button class="t" data-pane="tr-js">JavaScript</button>
+  </div>
+  <div class="pane on" id="tr-curl"><pre><code>curl -X POST http://localhost:<span data-fill="port_gateway">8765</span>/translate \
+  -H 'content-type: application/json' \
+  -d '{"text":"Good morning, the meeting is at nine.","target":"Spanish"}'</code></pre></div>
+  <div class="pane" id="tr-py"><pre><code>import requests
+
+r = requests.post(
+    "http://localhost:<span data-fill="port_gateway">8765</span>/translate",
+    json={"text": "Good morning, the meeting is at nine.", "target": "Spanish"},
+)
+print(r.json()["translated"])</code></pre></div>
+  <div class="pane" id="tr-js"><pre><code>const r = await fetch("/translate", {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ text: "Good morning.", target: "Spanish" }),
+});
+const { translated } = await r.json();</code></pre></div>
+
+  <h3>Response</h3>
+  <pre><code>{
+  "translated": "Buenos días, la reunión es a las nueve.",
+  "source": "auto",
+  "target": "Spanish",
+  "model": "<span data-fill="translator_model">hy-mt1.5-1.8b</span>"
+}</code></pre>
+
+  <h3>Or: OpenAI chat passthrough</h3>
+  <div class="endpoint">
+    <span class="verb">POST</span>
+    <span class="u">/v1/chat/completions</span>
+    <span class="where">gateway <code data-p="gateway">8765</code> · direct <code data-p="translator">9102</code> · raw <code data-p="translator_upstream">9202</code></span>
+  </div>
+  <div><pre><code>curl -X POST http://localhost:<span data-fill="port_gateway">8765</span>/v1/chat/completions \
+  -H 'content-type: application/json' \
+  -d '{"messages":[{"role":"user","content":"Translate to Spanish: good morning"}],
+       "temperature":0,"max_tokens":256}'</code></pre></div>
+  <div class="note">This is a <b>raw passthrough</b> to <code>llama-server</code> — it does <i>not</i> add the
+    translation prompt. You get a standard OpenAI <code>choices[0].message.content</code> envelope back, and you
+    must phrase the instruction yourself. Use <code>/translate</code> for clean output.</div>
+
+  <div class="try">
+    <div class="row"><textarea id="tr-text">Good morning, the meeting is at nine.</textarea></div>
+    <div class="row" style="margin-top:8px">
+      <span class="muted small">to</span>
+      <select id="tr-target"></select>
+      <button id="tr-run">Translate</button>
+    </div>
+    <div class="out" id="tr-out"></div>
+  </div>
+</div>
+
+<!-- ================================================= 3. text to speech -->
+<div class="card" id="sec-tts">
+  <h2>3 · Text-to-speech</h2>
+  <div class="sub">Text in, <b>raw audio bytes</b> out. The body is JSON but the response is not — do not call
+    <code>.json()</code> on it.</div>
+
+  <div class="endpoint">
+    <span class="verb">POST</span>
+    <span class="u">/v1/audio/speech</span>
+    <span class="where">gateway <code data-p="gateway">8765</code> · direct <code data-p="tts">9103</code></span>
+  </div>
+  <div class="row"><span class="muted small">Content-Type:</span>
+    <code>application/json</code>
+    <span class="muted small">— returns</span> <code>audio/wav</code> <span class="muted small">(binary, not JSON)</span></div>
+
+  <h3>JSON body</h3>
+  <table class="f">
+    <tr><th>Key</th><th></th><th>Accepts</th></tr>
+    <tr><td><code>input</code></td><td><span class="req">required</span></td>
+        <td>The text to speak. <b>Named <code>input</code>, not <code>text</code></b> — same as OpenAI's
+            speech API. Empty → <code>400 input text required</code>.</td></tr>
+    <tr><td><code>voice</code></td><td><span class="opt">optional</span></td>
+        <td>One of <code>F1 F2 F3 F4 F5 M1 M2 M3 M4 M5</code> for
+            <code data-fill="tts_model">supertonic-3</code>. Default <code>M1</code>.</td></tr>
+    <tr><td><code>language</code></td><td><span class="opt">optional</span></td>
+        <td>A <b>full language name</b> — <code>Spanish</code>, <code>Japanese</code>. Not a code.</td></tr>
+    <tr><td><code>response_format</code></td><td><span class="opt">optional</span></td>
+        <td>Accepted for OpenAI compatibility but <b>ignored</b> — the reply is always WAV.</td></tr>
+  </table>
+
+  <div class="tabs">
+    <button class="t on" data-pane="tts-curl">curl</button>
+    <button class="t" data-pane="tts-py">Python</button>
+    <button class="t" data-pane="tts-js">JavaScript</button>
+  </div>
+  <div class="pane on" id="tts-curl"><pre><code>curl -X POST http://localhost:<span data-fill="port_gateway">8765</span>/v1/audio/speech \
+  -H 'content-type: application/json' \
+  -d '{"input":"Hola a todos","voice":"M1","language":"Spanish"}' \
+  --output speech.wav</code></pre></div>
+  <div class="pane" id="tts-py"><pre><code>import requests
+
+r = requests.post(
+    "http://localhost:<span data-fill="port_gateway">8765</span>/v1/audio/speech",
+    json={"input": "Hola a todos", "voice": "M1", "language": "Spanish"},
+)
+r.raise_for_status()
+open("speech.wav", "wb").write(r.content)   # .content, not .json()</code></pre></div>
+  <div class="pane" id="tts-js"><pre><code>const r = await fetch("/v1/audio/speech", {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ input: "Hola a todos", voice: "M1", language: "Spanish" }),
+});
+const url = URL.createObjectURL(await r.blob());   // play it, or download it</code></pre></div>
+
+  <div class="note red"><b>The key is <code>input</code>.</b> Posting <code>{"text": "…"}</code> is the single most
+    common mistake here and returns <code>400 input text required</code>.</div>
+  <div class="note">Unknown voice → <code>500 synthesis failed: Voice style 'X' not found. Available voice
+    styles: F1, F2, F3, F4, F5, M1, M2, M3, M4, M5</code>. Live language list for the model you picked:
+    <code>GET http://localhost:<span data-p="tts">9103</span>/languages</code> or
+    <code>GET /api/languages</code> on the gateway.</div>
+
+  <div class="try">
+    <div class="row"><input type="text" id="tts-text" class="flex1" style="flex:1" value="Hola a todos, bienvenidos."></div>
+    <div class="row" style="margin-top:8px">
+      <span class="muted small">voice</span>
+      <select id="tts-voice"><option>M1</option><option>M2</option><option>M3</option><option>M4</option>
+        <option>M5</option><option>F1</option><option>F2</option><option>F3</option><option>F4</option><option>F5</option></select>
+      <span class="muted small">language</span>
+      <select id="tts-lang"></select>
+      <button id="tts-run">Speak</button>
+    </div>
+    <div class="out" id="tts-out"></div>
+    <audio id="tts-audio" controls style="display:none"></audio>
+  </div>
+</div>
+
+<!-- ==================================================== 4. full pipeline -->
+<div class="card" id="sec-pipeline">
+  <h2>4 · Full pipeline (one shot)</h2>
+  <div class="sub">Audio in, spoken translation out — STT → translate → TTS in a single call. Multipart body,
+    JSON response, audio returned as base64.</div>
+
+  <div class="endpoint">
+    <span class="verb">POST</span>
+    <span class="u">/api/pipeline</span>
+    <span class="where">gateway <code data-p="gateway">8765</code> only</span>
+  </div>
+  <div class="row"><span class="muted small">Content-Type:</span>
+    <code>multipart/form-data</code> <span class="muted small">— returns</span> <code>application/json</code></div>
+
+  <h3>Form fields</h3>
+  <table class="f">
+    <tr><th>Field</th><th></th><th>Accepts</th></tr>
+    <tr><td><code>file</code></td><td><span class="req">required</span></td>
+        <td>Source audio — same formats as stage 1.</td></tr>
+    <tr><td><code>source</code></td><td><span class="opt">optional</span></td>
+        <td>ISO-639-1 code (<code>en</code>, <code>es</code>…) or <code>auto</code>. Default <code>auto</code>.
+            Handed to Whisper as the spoken-language hint.</td></tr>
+    <tr><td><code>target</code></td><td><span class="opt">optional</span></td>
+        <td><b>Full language name</b> — <code>Spanish</code>. Default <code>English</code>.</td></tr>
+  </table>
+
+  <div class="tabs">
+    <button class="t on" data-pane="pl-curl">curl</button>
+    <button class="t" data-pane="pl-py">Python</button>
+    <button class="t" data-pane="pl-js">JavaScript</button>
+  </div>
+  <div class="pane on" id="pl-curl"><pre><code>curl -X POST http://localhost:<span data-fill="port_gateway">8765</span>/api/pipeline \
+  -F file=@speech.wav \
+  -F source=auto \
+  -F target=Spanish \
+  -o result.json
+
+# the spoken translation is base64 inside the JSON:
+#   result.json -> .audio_b64
+base64 -D result.json | jq -r .audio_b64 | base64 -D &gt; spoken.wav</code></pre></div>
+  <div class="pane" id="pl-py"><pre><code>import base64, requests
+
+r = requests.post(
+    "http://localhost:<span data-fill="port_gateway">8765</span>/api/pipeline",
+    files={"file": open("speech.wav", "rb")},
+    data={"source": "auto", "target": "Spanish"},
+)
+out = r.json()
+print(out["transcript"], "-&gt;", out["translated"])
+open("spoken.wav", "wb").write(base64.b64decode(out["audio_b64"]))</code></pre></div>
+  <div class="pane" id="pl-js"><pre><code>const fd = new FormData();
+fd.append("file", fileInput.files[0]);
+fd.append("target", "Spanish");
+
+const r   = await fetch("/api/pipeline", { method: "POST", body: fd });
+const out = await r.json();
+audio.src = "data:audio/wav;base64," + out.audio_b64;</code></pre></div>
+
+  <h3>Response</h3>
+  <pre><code>{
+  "transcript": "The meeting starts soon and everyone is waiting in the room.",
+  "translated": "La reunión comienza pronto, y todos están esperando en la sala.",
+  "audio_b64": "UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA="
+}</code></pre>
+
+  <div class="note"><b>Errors name the stage that failed:</b> <code>502 STT failed: …</code>,
+    <code>502 translation failed: …</code>, <code>502 TTS failed: …</code>, and
+    <code>422 empty transcript</code> when Whisper returns no text at all. Note that near-silence is <b>not</b>
+    an error — Whisper hallucinates a phrase (a 1 s silent file came back as <code>“Thank you.”</code> with
+    HTTP 200), so check the transcript before trusting the audio. A missing <code>ffmpeg</code> is called out
+    with the install command for your OS.</div>
+
+  <div class="try">
+    <div class="row">
+      <input type="file" id="pl-file" accept="audio/*,video/*">
+      <span class="muted small">target</span>
+      <select id="pl-target"></select>
+      <button id="pl-run">Run pipeline</button>
+    </div>
+    <div class="out" id="pl-out"></div>
+    <audio id="pl-audio" controls style="display:none"></audio>
+  </div>
+</div>
+
+<!-- ============================================== health & discovery -->
+<div class="card" id="sec-health">
+  <h2>Health &amp; discovery</h2>
+  <div class="sub">Cheap GETs to check what is up and what it will accept before you post anything.</div>
+  <table class="f">
+    <tr><th>Request</th><th>Returns</th></tr>
+    <tr><td><span class="verb get">GET</span> <code>/health</code> <span class="muted small">every port</span></td>
+        <td>On the gateway: <code>{"ok": true, "stages": {"stt": …, "translator": …, "tts": …}}</code>.
+            On each engine: its own detail — STT names its binary and downloaded weights, the translator
+            reports model + upstream, TTS reports <code>resident</code>, languages and the last <code>error</code>.</td></tr>
+    <tr><td><span class="verb get">GET</span> <code>/docs</code> <span class="muted small">gateway</span></td>
+        <td>FastAPI's interactive Swagger console for the gateway routes — post straight from the browser.</td></tr>
+    <tr><td><span class="verb get">GET</span> <code>/v1/models</code> <span class="muted small">port <code data-p="stt">9101</code> only</span></td>
+        <td>The valid <code>model</code> ids for stage 1. <b>404 on the gateway</b> — ask the STT port.</td></tr>
+    <tr><td><span class="verb get">GET</span> <code>/languages</code> <span class="muted small">port <code data-p="tts">9103</code></span></td>
+        <td>Languages the chosen TTS voice model can speak.</td></tr>
+    <tr><td><span class="verb get">GET</span> <code>/api/languages</code></td>
+        <td>Same list, from the gateway.</td></tr>
+    <tr><td><span class="verb get">GET</span> <code>/api/stack/state</code></td>
+        <td>Everything this page is built from: chosen models, devices, ports, per-stage health, memory.</td></tr>
+    <tr><td><span class="verb get">GET</span> <code>/api/setup/status</code></td>
+        <td>Full catalog, what is downloaded, and whether each engine's Python runtime is installed.</td></tr>
+  </table>
+</div>
+
+<!-- ======================================================== gotchas -->
+<div class="card" id="sec-gotchas">
+  <h2>Seven things that will bite you</h2>
+  <div class="sub">All of these are real responses from this server, not guesses.</div>
+  <table class="f">
+    <tr><th>If you send</th><th>You get</th><th>Instead</th></tr>
+    <tr><td><code>model=whisper-1</code></td><td><code>400 unknown model</code></td>
+        <td>Omit it, or use the id from <code>/v1/models</code>.</td></tr>
+    <tr><td><code>{"text":…}</code> to TTS</td><td><code>400 input text required</code></td>
+        <td><code>{"input":…}</code></td></tr>
+    <tr><td><code>target=es</code></td><td>the model is told “translate to es” and <i>may</i> still guess
+        Spanish — no guarantee</td>
+        <td>Full name: <code>Spanish</code>. Translator + TTS want names; only STT's <code>language</code> wants a code.</td></tr>
+    <tr><td><code>.json()</code> on the TTS reply</td><td>a parse error</td>
+        <td>It is <code>audio/wav</code> bytes — read <code>.content</code> / <code>.blob()</code>.</td></tr>
+    <tr><td><code>GET /v1/models</code> on the gateway</td><td><code>404</code></td>
+        <td>Ask port <code data-p="stt">9101</code>.</td></tr>
+    <tr><td>Port <code data-p="tts">9103</code> from another device</td><td>connection refused</td>
+        <td>Engines are loopback-only; bind the gateway to <code>0.0.0.0</code> and call it there.</td></tr>
+    <tr><td><code>{"response_format":"mp3"}</code></td><td>a WAV anyway</td>
+        <td>Only WAV is produced; convert after.</td></tr>
+  </table>
+  <div class="note">No API key is required on any port, and CORS is <code>*</code> — so a browser app on any origin
+    can call Nigiri directly. Treat the machine as trusted.</div>
+</div>
+
+</main>
+<div id="toast" class="toast"></div>
+<script>
+const $ = (s, r=document) => r.querySelector(s);
+const el = (t, c, h) => { const e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e; };
+const api = async (path, opts) => {
+  const r = await fetch(path, opts);
+  const ct = r.headers.get('content-type')||'';
+  const body = ct.includes('json') ? await r.json() : await r.text();
+  if(!r.ok) throw new Error((body && body.detail) || r.statusText);
+  return body;
+};
+const post = (path, json) => api(path, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(json||{})});
+const toast = (m) => { const t=$('#toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none', 5000); };
+const show = (id, txt) => { const o=$('#'+id); o.textContent=txt; o.style.display='block'; };
+const esc = (s) => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+// ---- tabs: each .t switches the .pane named by its data-pane, within its card
+document.querySelectorAll('.tabs').forEach(tb => {
+  tb.querySelectorAll('.t').forEach(btn => btn.onclick = () => {
+    const card = tb.closest('.card');
+    card.querySelectorAll('.tabs .t').forEach(b => b.classList.toggle('on', b===btn));
+    card.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.id===btn.dataset.pane));
+  });
+});
+
+// ---- fill the examples with this machine's real ports and model ids
+async function boot() {
+  const st = await api('/api/stack/state');
+  const ports = st.ports || {gateway:8765, stt:9101, translator:9102, translator_upstream:9202, tts:9103};
+  document.querySelectorAll('[data-p]').forEach(n => n.textContent = ports[n.dataset.p] ?? '');
+  const fills = {port_gateway: ports.gateway, stt_model: st.chosen?.stt||'',
+                 translator_model: st.chosen?.translator||'', tts_model: st.chosen?.tts||''};
+  document.querySelectorAll('[data-fill]').forEach(n => { const v=fills[n.dataset.fill]; if(v) n.textContent=v; });
+  $('#base').textContent = location.origin;
+
+  const row = $('#live-row'); row.innerHTML = '';
+  [['Speech-to-text','stt'],['Translation','translator'],['Text-to-speech','tts']].forEach(([label,kind]) => {
+    const h = st[kind]||{}, up = h.up;
+    row.appendChild(el('span','pill '+(up?'ok':'down'),
+      `<span class="dot ${up?'up':'down'}"></span>${label} · ${(st.chosen&&st.chosen[kind])||'—'}`));
+  });
+  if (!st.chosen?.tts) toast('no models chosen yet — open Nigiri and finish Setup first');
+
+  // language pickers come from the server, so they match the chosen TTS voice
+  let langs = ['English','Spanish','French','German','Japanese'];
+  try { langs = (await api('/api/languages')).languages || langs; } catch(e) {}
+  ['tr-target','tts-lang','pl-target'].forEach(id => {
+    const sel = $('#'+id); if(!sel) return;
+    sel.innerHTML = '';
+    langs.forEach(l => { const o=el('option'); o.value=l; o.textContent=l; if(l==='Spanish') o.selected=true; sel.appendChild(o); });
+  });
+}
+
+// ---- try it: stage 1
+$('#stt-run').onclick = async () => {
+  const f = $('#stt-file').files[0]; if(!f) return toast('pick an audio file first');
+  const b=$('#stt-run'); b.disabled=true; show('stt-out','transcribing…');
+  const fd = new FormData(); fd.append('file', f); fd.append('language', $('#stt-lang').value);
+  try { show('stt-out', JSON.stringify(await api('/v1/audio/transcriptions', {method:'POST', body:fd}), null, 2)); }
+  catch(e){ show('stt-out', 'error: '+e.message); }
+  b.disabled=false;
+};
+
+// ---- try it: stage 2
+$('#tr-run').onclick = async () => {
+  const b=$('#tr-run'); b.disabled=true; show('tr-out','translating…');
+  try { const r = await post('/translate', {text: $('#tr-text').value, target: $('#tr-target').value});
+        show('tr-out', r.translated); }
+  catch(e){ show('tr-out', 'error: '+e.message); }
+  b.disabled=false;
+};
+
+// ---- try it: stage 3 (binary response)
+$('#tts-run').onclick = async () => {
+  const b=$('#tts-run'); b.disabled=true; show('tts-out','synthesising…'); $('#tts-audio').style.display='none';
+  try {
+    const r = await fetch('/v1/audio/speech', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({input: $('#tts-text').value, voice: $('#tts-voice').value, language: $('#tts-lang').value})});
+    if(!r.ok) throw new Error(((await r.json().catch(()=>({}))||{}).detail) || ('HTTP '+r.status));
+    const blob = await r.blob();
+    const a = $('#tts-audio'); a.src = URL.createObjectURL(blob); a.style.display='block'; a.play().catch(()=>{});
+    show('tts-out', r.headers.get('content-type') + ' · ' + blob.size.toLocaleString() + ' bytes');
+  } catch(e){ show('tts-out', 'error: '+e.message); }
+  b.disabled=false;
+};
+
+// ---- try it: full pipeline
+$('#pl-run').onclick = async () => {
+  const f = $('#pl-file').files[0]; if(!f) return toast('pick an audio file first');
+  const b=$('#pl-run'); b.disabled=true; show('pl-out','running…'); $('#pl-audio').style.display='none';
+  const fd = new FormData(); fd.append('file', f); fd.append('target', $('#pl-target').value);
+  try {
+    const out = await api('/api/pipeline', {method:'POST', body:fd});
+    $('#pl-out').innerHTML = '<b>heard:</b> ' + esc(out.transcript) + '<br><b>spoken:</b> ' + esc(out.translated);
+    $('#pl-out').style.display='block';
+    const a = $('#pl-audio'); a.src = 'data:audio/wav;base64,' + out.audio_b64; a.style.display='block'; a.play().catch(()=>{});
+  } catch(e){ show('pl-out', 'error: '+e.message); }
+  b.disabled=false;
+};
+
+boot().catch(e => toast('could not read stack state: ' + e.message));
+</script>
+</body>
+</html>
